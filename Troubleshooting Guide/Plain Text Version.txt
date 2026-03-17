@@ -1,0 +1,251 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⬡  KEYFORGE STATIC-AUTH — TROUBLESHOOTING GUIDE
+  By Sudhir Kumar (@SudhirDevOps1)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 1 — CONSOLE PASTE WARNING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Problem:
+  "Warning: Don't paste code into the DevTools Console..."
+
+  Fix:
+  Console mein KHUD type karo (copy nahi): allow pasting
+  ENTER dabao → "Pasting enabled" aayega
+  Ab code paste karo → ENTER
+
+  Rules:
+  ❌ "allow pasting" copy-paste mat karo
+  ✅ Keyboard se khud type karo
+  ✅ Firefox use karo — wahan yeh warning nahi aati
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 2 — CONTENT LOAD FAILED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Problem: "Content load failed. Ensure encrypted-content.json exists."
+
+  Causes & Fixes:
+
+  A) Live server nahi chala raha:
+     ❌ Double-click se khola (file:// protocol)
+     ✅ npx serve .  →  http://localhost:3000
+
+  B) JSON file exist nahi karti:
+     ✅ touch encrypted-content.json (file banao)
+
+  C) File ka naam galat:
+     ❌ Encrypted-Content.json / encrypted_content.json
+     ✅ encrypted-content.json (exactly yeh)
+
+  D) CONFIG mein path galat:
+     ❌ contentFile: 'content.json'
+     ✅ contentFile: 'encrypted-content.json'
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 3 — JSON GALAT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Problem: Password sahi lekin decrypt nahi ho raha.
+
+  GALAT formats:
+  → Placeholder text abhi bhi hai: "GENERATE_THIS..."
+  → Extra text copy ho gaya: "[KeyForge] Copy into..."
+  → JSON adha hai: closing brackets missing
+
+  SAHI format:
+  {
+    "users": [
+      {
+        "username": "ADMIN",
+        "ciphertext": "U2FsdGVkX1+...pura text..."
+      }
+    ]
+  }
+
+  Validate: jsonlint.com pe paste karo
+  Green = sahi, Red = galat
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 4 — DIRECT FILE OPEN KARNA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Problem: URL mein file:// dikhta hai — fetch() kaam nahi karta.
+
+  ❌ GALAT: file:///C:/Users/.../index.html
+  ✅ SAHI:  http://localhost:3000
+
+  Fix:
+  npx serve .              →  localhost:3000
+  python3 -m http.server   →  localhost:8080
+  VS Code Live Server ext  →  localhost:5500
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 5 — PLACEHOLDER TEXT NAHI HATAYA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Problem: JSON mein abhi bhi "GENERATE_THIS..." likha hai.
+
+  Fix:
+  1. Site kholo (localhost pe)
+  2. F12 → Console → "allow pasting" → ENTER
+  3. KeyForge.generateMultiUser([...]) paste → ENTER
+  4. Output mein { "users": [...] } copy karo
+  5. encrypted-content.json mein replace karo
+  6. Save → Reload → Test
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 6 — PASSWORD KAAM NAHI KAR RAHA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Causes:
+  A) Extra space password mein
+     ❌ "admin123 " ✅ "admin123"
+
+  B) Caps Lock on
+     Fix: Caps Lock band karo
+
+  C) Alag password se encrypt kiya tha
+     Fix: Generate karte waqt jo password daala wahi use karo
+
+  D) JSON file update nahi hui
+     Fix: File mein U2FsdGVkX1... wala ciphertext hai?
+
+  E) Browser cache
+     Fix: Ctrl+Shift+R (hard reload)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 7 — KEYFORGE IS NOT DEFINED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Causes:
+  A) Galat page pe console khola
+     Fix: localhost:3000 pe jaao phir F12
+
+  B) Page load nahi hua
+     Fix: Ctrl+R reload → phir try karo
+
+  C) Script tag missing index.html mein
+     Fix: CryptoJS CDN script + inline auth script dono check karo
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 8 — CRYPTOJS LOAD NAHI HUA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Problem: "CryptoJS is not defined"
+
+  Fix A: Internet check karo (CDN se aata hai)
+  Fix B: Self-host karo:
+         1. crypto-js.min.js download karo
+         2. Project folder mein rakho
+         3. Script tag change karo:
+            <script src="crypto-js.min.js"></script>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 9 — JSON ADHA COPY KIYA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Console mein 3 cheezein dikhti hain:
+
+  LINE 1: [KeyForge] Copy into...  ← MAT COPY KARO
+  LINE 2: { "users": [...] }       ← YAHI COPY KARO
+  LINE 3: '{\n "users":...'        ← MAT COPY KARO
+
+  Sahi copy: Pehle { se aakhri } tak sirf.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 10 — DONO FILES ALAG FOLDER MEIN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ❌ GALAT:
+  Desktop/index.html
+  Downloads/encrypted-content.json
+
+  ✅ SAHI:
+  my-project/
+  ├── index.html
+  └── encrypted-content.json
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 11 — AUTO-LOCK JALDI HO RAHA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Fix — CONFIG mein change karo:
+  autoLockSeconds: 120   → 2 min (default)
+  autoLockSeconds: 300   → 5 min
+  autoLockSeconds: 600   → 10 min
+  autoLockSeconds: 0     → Kabhi nahi
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MISTAKE 12 — MOBILE PE KAAM NAHI KAR RAHA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Fix A: Desktop pe server → Mobile same WiFi pe
+         http://192.168.1.XX:3000 (desktop IP)
+
+  Fix B: Viewport meta tag check karo:
+         <meta name="viewport" content="width=device-width,
+         initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+
+  Fix C: Input font-size min 16px hona chahiye (iOS zoom fix)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ERROR MESSAGE DIRECTORY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ERROR                      MATLAB           FIX
+  ─────────────────────────────────────────────────────────────
+  "Content load failed"      JSON nahi mili   Server + file check
+  "Invalid key"              Password galat   Sahi password daalo
+  "Too many attempts"        5 galat attempts 30 sec wait karo
+  "Security key empty"       Password blank   Kuch type karo
+  "KeyForge not defined"     Script nahi chla Apni site pe kholna
+  "CryptoJS not defined"     CDN fail         Internet / self-host
+  "Unexpected token"         JSON galat hai   jsonlint.com check
+  "HTTP 404"                 File nahi mili   Filename check karo
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  60 SECOND QUICK FIX
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [1] cd apne-project-folder
+  [2] npx serve .
+  [3] http://localhost:3000 kholo
+  [4] F12 → Console → "allow pasting" → ENTER
+  [5] KeyForge.generateMultiUser([...]) → ENTER
+  [6] { "users": [...] } copy → JSON file mein paste → Save
+  [7] Ctrl+R reload → Password test karo ✅
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  QUICK DIAGNOSIS CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  SETUP:
+  □ Dono files ek folder mein hain?
+  □ Local server chal raha hai?
+  □ URL mein http://localhost hai? (file:// nahi)
+  □ Internet connected? (CryptoJS CDN)
+
+  JSON:
+  □ Real ciphertext hai? (U2FsdGVkX1... se shuru)
+  □ Placeholder "GENERATE_THIS..." nahi hai?
+  □ JSON sahi format hai? (jsonlint.com)
+  □ Filename exactly "encrypted-content.json"?
+
+  PASSWORD:
+  □ Generate wala hi password use kar rahe ho?
+  □ Caps Lock band hai?
+  □ Extra space nahi hai?
+
+  CONSOLE:
+  □ Koi red error nahi?
+  □ "KeyForge is not defined" nahi?
+  □ "CryptoJS is not defined" nahi?
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⬡ KEYFORGE SECURITY PROTOCOL
+  By Sudhir Kumar (@SudhirDevOps1)
+  github.com/SudhirDevOps1
+  © 2024 MIT License
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
