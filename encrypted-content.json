@@ -1,0 +1,12 @@
+{
+  "users": [
+    {
+      "username": "ADMIN",
+      "ciphertext": "REPLACE_WITH_OUTPUT_FROM_KeyForge.generateMultiUser()"
+    },
+    {
+      "username": "AGENT_SHADOW",
+      "ciphertext": "REPLACE_WITH_OUTPUT_FROM_KeyForge.generateMultiUser()"
+    }
+  ]
+}
