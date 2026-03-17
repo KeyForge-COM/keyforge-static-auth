@@ -1,0 +1,2760 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#050510" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="referrer" content="no-referrer" />
+    <title>KeyForge Static-Auth v3.0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --neon-cyan: #00fff5;
+            --neon-magenta: #ff00ff;
+            --neon-yellow: #ffff00;
+            --neon-red: #ff003c;
+            --neon-green: #00ff88;
+            --neon-orange: #ff8800;
+            --bg-dark: #050510;
+            --bg-panel: #0a0a1a;
+            --bg-input: #0d0d22;
+            --border-dim: #1a1a3a;
+            --text-primary: #e0e0ff;
+            --text-dim: #5a5a8a;
+            --font-mono: 'Courier New', Courier, monospace;
+            --touch-min: 44px;
+        }
+
+        html {
+            height: 100%;
+            font-size: 16px;
+        }
+
+        body {
+            min-height: 100%;
+            min-height: 100dvh;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0, 255, 245, .03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 245, .03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            animation: gridScroll 20s linear infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px,
+                    rgba(0, 0, 0, .1) 2px, rgba(0, 0, 0, .1) 4px);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        @keyframes gridScroll {
+            0% {
+                background-position: 0 0;
+            }
+
+            100% {
+                background-position: 40px 40px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            *::before,
+            *::after {
+                animation-duration: .01ms !important;
+                transition-duration: .01ms !important;
+            }
+        }
+
+        /* ── UTIL BAR ── */
+        #util-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, .05);
+            display: none;
+        }
+
+        #session-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta));
+            width: 100%;
+            transition: width 1s linear;
+            box-shadow: 0 0 10px var(--neon-cyan);
+        }
+
+        #session-badge {
+            position: fixed;
+            top: 10px;
+            right: 56px;
+            z-index: 1001;
+            font-size: .62rem;
+            letter-spacing: .08em;
+            color: var(--text-dim);
+            background: rgba(5, 5, 16, .9);
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--border-dim);
+            display: none;
+            backdrop-filter: blur(6px);
+            white-space: nowrap;
+        }
+
+        /* ── NUKE BUTTON ── */
+        #nuke-btn {
+            position: fixed;
+            top: 8px;
+            right: 10px;
+            z-index: 1002;
+            width: 36px;
+            height: 36px;
+            background: rgba(255, 0, 60, .12);
+            border: 1px solid rgba(255, 0, 60, .4);
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            transition: all .2s;
+            backdrop-filter: blur(6px);
+            animation: nukePulse 3s ease-in-out infinite;
+        }
+
+        #nuke-btn:hover {
+            background: rgba(255, 0, 60, .3);
+            border-color: var(--neon-red);
+            box-shadow: 0 0 16px rgba(255, 0, 60, .5);
+            transform: scale(1.1);
+            animation: none;
+        }
+
+        @keyframes nukePulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 4px rgba(255, 0, 60, .2);
+            }
+
+            50% {
+                box-shadow: 0 0 12px rgba(255, 0, 60, .5);
+            }
+        }
+
+        /* ── NUKE MODAL ── */
+        #nuke-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .85);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            backdrop-filter: blur(8px);
+        }
+
+        #nuke-modal.visible {
+            display: flex;
+        }
+
+        .nuke-box {
+            background: var(--bg-panel);
+            border: 1px solid var(--neon-red);
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 380px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 0 40px rgba(255, 0, 60, .2);
+            animation: fadeInUp .3s ease;
+        }
+
+        .nuke-icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+        }
+
+        .nuke-title {
+            font-size: 1.1rem;
+            color: var(--neon-red);
+            letter-spacing: .15em;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .nuke-desc {
+            font-size: .82rem;
+            color: var(--text-dim);
+            line-height: 1.7;
+            margin-bottom: 24px;
+        }
+
+        .nuke-desc strong {
+            color: var(--text-primary);
+        }
+
+        .nuke-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        .btn-nuke-confirm {
+            flex: 1;
+            padding: 12px;
+            background: rgba(255, 0, 60, .15);
+            border: 1px solid var(--neon-red);
+            border-radius: 6px;
+            color: var(--neon-red);
+            font-family: var(--font-mono);
+            font-size: .8rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .btn-nuke-confirm:hover {
+            background: rgba(255, 0, 60, .3);
+            box-shadow: 0 0 16px rgba(255, 0, 60, .3);
+        }
+
+        .btn-nuke-cancel {
+            flex: 1;
+            padding: 12px;
+            background: rgba(0, 255, 245, .05);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            color: var(--text-dim);
+            font-family: var(--font-mono);
+            font-size: .8rem;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .btn-nuke-cancel:hover {
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan);
+        }
+
+        .nuke-flash {
+            position: fixed;
+            inset: 0;
+            background: var(--neon-red);
+            opacity: 0;
+            z-index: 1999;
+            pointer-events: none;
+            animation: nukeFlash .6s ease forwards;
+        }
+
+        @keyframes nukeFlash {
+            0% {
+                opacity: .5;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+
+        /* ── PARTICLES ── */
+        .particles-wrap {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+            overflow: hidden;
+        }
+
+        @media (max-width: 768px) {
+            .particles-wrap {
+                display: none;
+            }
+        }
+
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0;
+            animation: particleDrift linear infinite;
+        }
+
+        @keyframes particleDrift {
+            0% {
+                transform: translateY(100vh);
+                opacity: 0;
+            }
+
+            10% {
+                opacity: .6;
+            }
+
+            90% {
+                opacity: .3;
+            }
+
+            100% {
+                transform: translateY(-10vh) translateX(30px);
+                opacity: 0;
+            }
+        }
+
+        /* ── LOCK SCREEN ── */
+        #lock-screen {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            z-index: 100;
+            padding: clamp(16px, 4vw, 28px);
+            padding-top: max(clamp(16px, 4vw, 28px), env(safe-area-inset-top));
+            padding-bottom: max(16px, env(safe-area-inset-bottom));
+            overflow-y: auto;
+            transition: opacity .5s ease, transform .5s ease;
+        }
+
+        #lock-screen.hidden {
+            opacity: 0;
+            transform: scale(1.04);
+            pointer-events: none;
+        }
+
+        .lock-inner {
+            width: 100%;
+            max-width: 460px;
+            margin: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: clamp(14px, 3vw, 24px);
+            padding-bottom: 20px;
+        }
+
+        .brand-header {
+            text-align: center;
+            animation: fadeInDown .8s ease both;
+        }
+
+        .brand-logo {
+            font-size: clamp(1.8rem, 7vw, 3.2rem);
+            font-weight: 900;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: logoPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes logoPulse {
+
+            0%,
+            100% {
+                filter: drop-shadow(0 0 10px rgba(0, 255, 245, .5));
+            }
+
+            50% {
+                filter: drop-shadow(0 0 22px rgba(255, 0, 255, .6));
+            }
+        }
+
+        .brand-tagline {
+            font-size: clamp(.58rem, 2vw, .72rem);
+            letter-spacing: .25em;
+            color: var(--neon-cyan);
+            text-transform: uppercase;
+            opacity: .6;
+            margin-top: 5px;
+        }
+
+        .lock-icon-wrap {
+            position: relative;
+            width: 76px;
+            height: 76px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            animation: fadeInDown .8s .2s ease both;
+        }
+
+        @media (max-height: 560px) {
+            .lock-icon-wrap {
+                display: none;
+            }
+        }
+
+        .lock-icon {
+            font-size: clamp(1.8rem, 7vw, 2.8rem);
+            position: relative;
+            z-index: 1;
+            animation: lockPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes lockPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
+        }
+
+        .lock-ring {
+            position: absolute;
+            inset: -12px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            border-top-color: var(--neon-cyan);
+            border-bottom-color: var(--neon-magenta);
+            animation: spinRing 3s linear infinite;
+        }
+
+        .lock-ring-2 {
+            inset: -22px;
+            border-width: 1px;
+            border-top-color: var(--neon-magenta);
+            border-bottom-color: var(--neon-cyan);
+            animation-duration: 5s;
+            animation-direction: reverse;
+        }
+
+        @keyframes spinRing {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ── AUTH PANEL ── */
+        .auth-panel {
+            background: var(--bg-panel);
+            border: 1px solid rgba(0, 255, 245, .35);
+            border-radius: clamp(8px, 2vw, 14px);
+            padding: 0;
+            width: 100%;
+            position: relative;
+            animation: fadeInUp .8s .3s ease both;
+            box-shadow:
+                0 0 0 1px rgba(0, 255, 245, .06),
+                0 0 40px rgba(0, 255, 245, .07),
+                0 20px 60px rgba(0, 0, 0, .5),
+                inset 0 0 40px rgba(0, 0, 0, .3);
+            overflow: hidden;
+        }
+
+        .auth-panel::before,
+        .auth-panel::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-color: var(--neon-magenta);
+            border-style: solid;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .auth-panel::before {
+            top: -1px;
+            left: -1px;
+            border-width: 2px 0 0 2px;
+            border-radius: 2px 0 0 0;
+        }
+
+        .auth-panel::after {
+            bottom: -1px;
+            right: -1px;
+            border-width: 0 2px 2px 0;
+            border-radius: 0 0 2px 0;
+        }
+
+        /* ── TAB BAR ── */
+        .tab-bar {
+            display: flex;
+            border-bottom: 1px solid var(--border-dim);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 14px 8px;
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-family: var(--font-mono);
+            font-size: clamp(.65rem, 2vw, .75rem);
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all .2s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+        }
+
+        .tab-btn.active {
+            color: var(--neon-cyan);
+            border-bottom-color: var(--neon-cyan);
+            background: rgba(0, 255, 245, .04);
+        }
+
+        .tab-btn:hover:not(.active) {
+            color: var(--text-primary);
+        }
+
+        .tab-panel {
+            display: none;
+            padding: clamp(18px, 4vw, 32px) clamp(16px, 4vw, 36px);
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        .panel-title {
+            font-size: clamp(.72rem, 2.2vw, .88rem);
+            letter-spacing: .15em;
+            text-transform: uppercase;
+            color: var(--neon-cyan);
+            text-align: center;
+            margin-bottom: clamp(14px, 3vw, 22px);
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-dim);
+        }
+
+        /* ── FIELDS ── */
+        .field-group {
+            margin-bottom: clamp(12px, 2.5vw, 18px);
+        }
+
+        .field-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: clamp(.6rem, 1.7vw, .68rem);
+            letter-spacing: .16em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-bottom: 7px;
+            user-select: none;
+        }
+
+        .field-required {
+            color: var(--neon-red);
+            font-size: .75rem;
+            line-height: 1;
+        }
+
+        .field-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .field-icon {
+            position: absolute;
+            left: 12px;
+            font-size: .9rem;
+            pointer-events: none;
+            z-index: 1;
+            line-height: 1;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        textarea,
+        select {
+            width: 100%;
+            font-size: max(16px, 1rem);
+            padding: clamp(11px, 2.2vw, 13px) 42px clamp(11px, 2.2vw, 13px) 40px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            letter-spacing: .04em;
+            outline: none;
+            transition: border-color .3s, box-shadow .3s;
+            min-height: var(--touch-min);
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        input[aria-invalid="true"],
+        textarea[aria-invalid="true"] {
+            border-color: rgba(255, 0, 60, .5);
+            box-shadow: 0 0 0 2px rgba(255, 0, 60, .1);
+        }
+
+        textarea {
+            padding: 10px 12px;
+            min-height: 80px;
+            resize: vertical;
+            line-height: 1.5;
+            font-size: .82rem;
+        }
+
+        select {
+            padding-left: 12px;
+            cursor: pointer;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 0 2px rgba(0, 255, 245, .12);
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: var(--text-dim);
+            opacity: 1;
+        }
+
+        .toggle-pw {
+            position: absolute;
+            right: 4px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: .9rem;
+            color: var(--text-dim);
+            transition: color .2s;
+            min-width: 40px;
+            min-height: var(--touch-min);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+        }
+
+        .toggle-pw:hover {
+            color: var(--neon-cyan);
+        }
+
+        /* ── BUTTONS ── */
+        .btn-primary {
+            width: 100%;
+            padding: clamp(12px, 2.5vw, 14px);
+            background: linear-gradient(135deg,
+                    rgba(0, 255, 245, .08), rgba(255, 0, 255, .08));
+            border: 1px solid var(--neon-cyan);
+            border-radius: 6px;
+            color: var(--neon-cyan);
+            font-family: var(--font-mono);
+            font-size: clamp(.82rem, 2.2vw, .95rem);
+            font-weight: 700;
+            letter-spacing: .16em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all .3s;
+            position: relative;
+            overflow: hidden;
+            min-height: var(--touch-min);
+            margin-top: 4px;
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg,
+                    var(--neon-cyan), var(--neon-magenta));
+            opacity: 0;
+            transition: opacity .3s;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 24px rgba(0, 255, 245, .3);
+        }
+
+        .btn-primary:hover::before {
+            opacity: .1;
+        }
+
+        .btn-primary:active {
+            transform: scale(.98);
+        }
+
+        .btn-primary:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary span {
+            position: relative;
+            z-index: 1;
+        }
+
+        .btn-secondary {
+            width: 100%;
+            padding: clamp(10px, 2vw, 12px);
+            background: rgba(0, 255, 245, .05);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            color: var(--text-dim);
+            font-family: var(--font-mono);
+            font-size: .78rem;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all .2s;
+            min-height: 38px;
+            margin-top: 8px;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan);
+        }
+
+        /* ── MESSAGES ── */
+        .error-msg {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 11px 13px;
+            background: rgba(255, 0, 60, .07);
+            border: 1px solid rgba(255, 0, 60, .3);
+            border-radius: 6px;
+            color: var(--neon-red);
+            font-size: clamp(.73rem, 1.9vw, .8rem);
+            margin-top: 12px;
+            line-height: 1.5;
+        }
+
+        .error-msg.hidden {
+            display: none;
+        }
+
+        .error-msg.shake {
+            animation: shakeX .4s ease;
+        }
+
+        .success-msg {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 11px 13px;
+            background: rgba(0, 255, 136, .06);
+            border: 1px solid rgba(0, 255, 136, .3);
+            border-radius: 6px;
+            color: var(--neon-green);
+            font-size: .8rem;
+            margin-top: 12px;
+            line-height: 1.5;
+        }
+
+        .success-msg.hidden {
+            display: none;
+        }
+
+        @keyframes shakeX {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            20% {
+                transform: translateX(-7px);
+            }
+
+            40% {
+                transform: translateX(7px);
+            }
+
+            60% {
+                transform: translateX(-4px);
+            }
+
+            80% {
+                transform: translateX(4px);
+            }
+        }
+
+        /* ── LOCKOUT BAR ── */
+        .lockout-bar-wrap {
+            height: 3px;
+            background: rgba(255, 0, 60, .15);
+            border-radius: 3px;
+            margin-top: 8px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .lockout-bar {
+            height: 100%;
+            background: var(--neon-red);
+            width: 100%;
+            transition: width 1s linear;
+            box-shadow: 0 0 6px var(--neon-red);
+        }
+
+        .lockout-bar-wrap.visible {
+            display: block;
+        }
+
+        /* ── STATUS ── */
+        .status-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 16px;
+            font-size: clamp(.58rem, 1.6vw, .65rem);
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            flex-wrap: wrap;
+        }
+
+        .status-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--neon-green);
+            animation: dotBlink 1.5s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes dotBlink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .2;
+            }
+        }
+
+        /* ── ACCESS LOG ── */
+        .log-toggle {
+            text-align: center;
+            margin-top: 14px;
+            font-size: clamp(.62rem, 1.7vw, .7rem);
+            letter-spacing: .1em;
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 6px;
+            user-select: none;
+            transition: color .2s;
+        }
+
+        .log-toggle:hover {
+            color: var(--neon-cyan);
+        }
+
+        .access-log {
+            margin-top: 8px;
+            background: rgba(0, 0, 0, .4);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            padding: 8px 10px;
+            max-height: 100px;
+            overflow-y: auto;
+            font-size: .65rem;
+            color: var(--text-dim);
+            display: none;
+            overscroll-behavior: contain;
+        }
+
+        .access-log.visible {
+            display: block;
+        }
+
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, .04);
+            word-break: break-all;
+            line-height: 1.5;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-ok {
+            color: var(--neon-green);
+        }
+
+        .log-err {
+            color: var(--neon-red);
+        }
+
+        .log-info {
+            color: var(--neon-orange);
+        }
+
+        /* ── ENCRYPT TAB ── */
+        .encrypt-section-title {
+            font-size: .65rem;
+            letter-spacing: .15em;
+            text-transform: uppercase;
+            color: var(--neon-magenta);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .user-entry-block {
+            background: rgba(0, 0, 0, .3);
+            border: 1px solid var(--border-dim);
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 10px;
+            position: relative;
+            transition: border-color .2s;
+        }
+
+        .user-entry-block:focus-within {
+            border-color: rgba(0, 255, 245, .2);
+        }
+
+        .user-entry-label {
+            font-size: .62rem;
+            color: var(--text-dim);
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .btn-remove-user {
+            background: none;
+            border: none;
+            color: var(--neon-red);
+            font-size: .8rem;
+            cursor: pointer;
+            padding: 2px 6px;
+            opacity: .5;
+            transition: opacity .2s;
+            border-radius: 3px;
+        }
+
+        .btn-remove-user:hover {
+            opacity: 1;
+        }
+
+        .user-field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        @media (max-width: 400px) {
+            .user-field-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .user-field-row input {
+            min-height: 40px;
+            padding: 8px 10px;
+            font-size: .82rem;
+        }
+
+        .content-textarea {
+            width: 100%;
+            padding: 8px 10px !important;
+            font-size: .78rem !important;
+            min-height: 80px;
+            border-radius: 6px;
+        }
+
+        .btn-add-user {
+            width: 100%;
+            padding: 9px;
+            background: rgba(255, 0, 255, .06);
+            border: 1px dashed rgba(255, 0, 255, .3);
+            border-radius: 6px;
+            color: var(--neon-magenta);
+            font-family: var(--font-mono);
+            font-size: .72rem;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all .2s;
+            margin-bottom: 12px;
+        }
+
+        .btn-add-user:hover {
+            border-color: var(--neon-magenta);
+            background: rgba(255, 0, 255, .1);
+        }
+
+        .output-label {
+            font-size: .62rem;
+            color: var(--text-dim);
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            margin-top: 10px;
+            margin-bottom: 4px;
+            display: none;
+        }
+
+        .output-label.visible {
+            display: block;
+        }
+
+        .output-box {
+            background: rgba(0, 0, 0, .5);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            padding: 10px;
+            font-size: .68rem;
+            color: var(--neon-green);
+            word-break: break-all;
+            max-height: 120px;
+            overflow-y: auto;
+            line-height: 1.5;
+            display: none;
+            margin-top: 10px;
+        }
+
+        .output-box.visible {
+            display: block;
+        }
+
+        .btn-copy-output {
+            margin-top: 6px;
+            padding: 7px 16px;
+            background: rgba(0, 255, 136, .08);
+            border: 1px solid rgba(0, 255, 136, .3);
+            border-radius: 4px;
+            color: var(--neon-green);
+            font-family: var(--font-mono);
+            font-size: .68rem;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all .2s;
+            display: none;
+        }
+
+        .btn-copy-output.visible {
+            display: inline-block;
+        }
+
+        .btn-copy-output:hover {
+            background: rgba(0, 255, 136, .18);
+        }
+
+        .mode-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 8px 4px;
+            background: rgba(0, 0, 0, .3);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            color: var(--text-dim);
+            font-family: var(--font-mono);
+            font-size: .65rem;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all .2s;
+            text-align: center;
+        }
+
+        .mode-btn.active {
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan);
+            background: rgba(0, 255, 245, .06);
+        }
+
+        .autolock-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: rgba(0, 0, 0, .3);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            margin-bottom: 14px;
+        }
+
+        .autolock-row label {
+            font-size: .65rem;
+            color: var(--text-dim);
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
+        .autolock-row select {
+            flex: 1;
+            padding: 6px 10px;
+            font-size: .78rem;
+            min-height: 34px;
+            border-radius: 4px;
+        }
+
+        .privacy-badge {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 10px 12px;
+            background: rgba(0, 255, 136, .04);
+            border: 1px solid rgba(0, 255, 136, .2);
+            border-radius: 6px;
+            font-size: .64rem;
+            color: var(--neon-green);
+            letter-spacing: .06em;
+            margin-top: 14px;
+            line-height: 1.6;
+        }
+
+        /* ── LANDSCAPE FIX ── */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .lock-icon-wrap {
+                display: none;
+            }
+
+            .tab-panel {
+                padding: 12px 16px;
+            }
+
+            .tab-btn {
+                padding: 10px 6px;
+            }
+
+            .field-group {
+                margin-bottom: 8px;
+            }
+        }
+
+        /* ── APP CONTENT ── */
+        #app-content {
+            position: relative;
+            z-index: 10;
+            display: none;
+            min-height: 100dvh;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        #app-content.visible {
+            display: block;
+        }
+
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 0 clamp(12px, 3vw, 24px);
+            height: clamp(48px, 8vw, 60px);
+            background: rgba(10, 10, 26, .97);
+            border-bottom: 1px solid var(--border-dim);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            padding-top: env(safe-area-inset-top);
+        }
+
+        .top-bar-brand {
+            font-size: clamp(.62rem, 1.8vw, .78rem);
+            letter-spacing: .14em;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .top-bar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .session-user {
+            font-size: clamp(.6rem, 1.7vw, .7rem);
+            color: var(--neon-green);
+            letter-spacing: .06em;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 360px) {
+            .session-user {
+                display: none;
+            }
+        }
+
+        .btn-lock {
+            padding: 0 clamp(8px, 1.8vw, 14px);
+            height: clamp(30px, 4.5vw, 36px);
+            background: transparent;
+            border: 1px solid var(--neon-red);
+            border-radius: 4px;
+            color: var(--neon-red);
+            font-family: var(--font-mono);
+            font-size: clamp(.6rem, 1.6vw, .68rem);
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all .2s;
+            white-space: nowrap;
+            min-width: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-lock:hover {
+            background: rgba(255, 0, 60, .1);
+            box-shadow: 0 0 10px rgba(255, 0, 60, .25);
+        }
+
+        #rendered-content {
+            padding: clamp(18px, 4vw, 44px) clamp(14px, 3.5vw, 28px);
+            max-width: 920px;
+            margin: 0 auto;
+            animation: fadeInUp .5s ease both;
+        }
+
+        #rendered-content h1,
+        #rendered-content h2,
+        #rendered-content h3 {
+            color: var(--neon-cyan);
+            margin-bottom: 10px;
+            letter-spacing: .04em;
+            line-height: 1.3;
+        }
+
+        #rendered-content h1 {
+            font-size: clamp(1.2rem, 3.5vw, 1.9rem);
+            border-bottom: 1px solid var(--border-dim);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        #rendered-content h2 {
+            font-size: clamp(.95rem, 2.5vw, 1.3rem);
+            margin-top: 24px;
+        }
+
+        #rendered-content p {
+            line-height: 1.8;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            font-size: clamp(.82rem, 2vw, .92rem);
+        }
+
+        #rendered-content .card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-dim);
+            border-radius: 8px;
+            padding: clamp(14px, 3vw, 22px);
+            margin-bottom: 14px;
+            transition: border-color .3s;
+        }
+
+        #rendered-content .card:hover {
+            border-color: rgba(0, 255, 245, .35);
+        }
+
+        #rendered-content .tag {
+            display: inline-block;
+            padding: 3px 9px;
+            border-radius: 3px;
+            font-size: clamp(.62rem, 1.6vw, .7rem);
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            background: rgba(0, 255, 245, .07);
+            color: var(--neon-cyan);
+            border: 1px solid rgba(0, 255, 245, .2);
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+
+        #rendered-content ul {
+            padding-left: 18px;
+            line-height: 2;
+            color: var(--text-primary);
+            font-size: clamp(.82rem, 2vw, .92rem);
+        }
+
+        .brand-footer {
+            text-align: center;
+            padding: clamp(20px, 4vw, 36px) clamp(14px, 3vw, 22px);
+            border-top: 1px solid var(--border-dim);
+            font-size: clamp(.6rem, 1.7vw, .7rem);
+            letter-spacing: .1em;
+            color: var(--text-dim);
+            line-height: 2;
+        }
+
+        .brand-footer a {
+            color: var(--neon-cyan);
+            text-decoration: none;
+            transition: color .2s;
+        }
+
+        .brand-footer a:hover {
+            color: var(--neon-magenta);
+        }
+
+        .footer-protocol {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+        }
+
+        .footer-links {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 6px 14px;
+            margin-top: 6px;
+        }
+
+        /* ── ANIMATIONS ── */
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-14px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(14px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .unlock-flash {
+            position: fixed;
+            inset: 0;
+            background: var(--neon-cyan);
+            opacity: 0;
+            z-index: 99;
+            pointer-events: none;
+            animation: flashIn .5s ease forwards;
+        }
+
+        @keyframes flashIn {
+            0% {
+                opacity: .25;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 13px;
+            height: 13px;
+            border: 2px solid rgba(0, 255, 245, .15);
+            border-top-color: var(--neon-cyan);
+            border-radius: 50%;
+            animation: spin .6s linear infinite;
+            vertical-align: middle;
+            margin-right: 7px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--neon-cyan);
+            border-radius: 2px;
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--neon-cyan);
+            outline-offset: 2px;
+        }
+
+        @media print {
+            #lock-screen {
+                display: flex !important;
+            }
+
+            #app-content {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- PARTICLES -->
+    <div class="particles-wrap" id="particles-wrap" aria-hidden="true"></div>
+
+    <!-- SESSION BAR -->
+    <div id="util-bar" aria-hidden="true">
+        <div id="session-bar"></div>
+    </div>
+    <div id="session-badge" aria-live="polite"></div>
+
+    <!-- NUKE BUTTON -->
+    <button id="nuke-btn" title="Privacy Nuke — Clear Everything" aria-label="Privacy nuke">🔥</button>
+
+    <!-- NUKE MODAL -->
+    <div id="nuke-modal" role="dialog" aria-modal="true" aria-label="Confirm privacy nuke">
+        <div class="nuke-box">
+            <div class="nuke-icon">🔥</div>
+            <div class="nuke-title">Privacy Nuke</div>
+            <div class="nuke-desc">
+                This will <strong>immediately lock your session</strong>,
+                clear all content from screen, wipe the access log,
+                and return to the lock screen.
+                <br><br>
+                <strong>No data is stored anywhere.</strong>
+            </div>
+            <div class="nuke-actions">
+                <button class="btn-nuke-confirm" id="nuke-confirm">🔥 Nuke It</button>
+                <button class="btn-nuke-cancel" id="nuke-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════
+       LOCK SCREEN
+  ═══════════════════════════════════ -->
+    <main id="lock-screen" role="main" aria-label="Authentication">
+        <div class="lock-inner">
+
+            <header class="brand-header">
+                <div class="brand-logo" aria-label="KeyForge">⬡ KeyForge</div>
+                <div class="brand-tagline">Static-Auth Security Protocol v3.0</div>
+            </header>
+
+            <div class="lock-icon-wrap" aria-hidden="true">
+                <span class="lock-icon">🔒</span>
+                <div class="lock-ring"></div>
+                <div class="lock-ring lock-ring-2"></div>
+            </div>
+
+            <!-- AUTH PANEL -->
+            <div class="auth-panel">
+
+                <!-- TABS -->
+                <div class="tab-bar" role="tablist">
+                    <button class="tab-btn active" id="tab-login-btn" role="tab" aria-selected="true"
+                        aria-controls="tab-login">
+                        🔐 Login
+                    </button>
+                    <button class="tab-btn" id="tab-encrypt-btn" role="tab" aria-selected="false"
+                        aria-controls="tab-encrypt">
+                        🔑 Encrypt
+                    </button>
+                </div>
+
+                <!-- LOGIN TAB -->
+                <div class="tab-panel active" id="tab-login" role="tabpanel">
+
+                    <div class="panel-title">▸ Authentication Required ◂</div>
+
+                    <!-- Username — REQUIRED -->
+                    <div class="field-group">
+                        <label class="field-label" for="username-input">
+                            Access Identity
+                            <span class="field-required" aria-label="required">*</span>
+                        </label>
+                        <div class="field-wrap">
+                            <span class="field-icon" aria-hidden="true">👤</span>
+                            <input type="text" id="username-input" name="username" placeholder="Enter username…"
+                                autocomplete="username" autocorrect="off" autocapitalize="none" spellcheck="false"
+                                enterkeyhint="next" required />
+                        </div>
+                    </div>
+
+                    <!-- Password — REQUIRED -->
+                    <div class="field-group">
+                        <label class="field-label" for="password-input">
+                            Security Key
+                            <span class="field-required" aria-label="required">*</span>
+                        </label>
+                        <div class="field-wrap">
+                            <span class="field-icon" aria-hidden="true">🔑</span>
+                            <input type="password" id="password-input" name="password" placeholder="Enter access key…"
+                                autocomplete="current-password" autocorrect="off" autocapitalize="none"
+                                spellcheck="false" enterkeyhint="go" required />
+                            <button class="toggle-pw" id="toggle-pw" type="button"
+                                aria-label="Toggle password visibility">👁</button>
+                        </div>
+                    </div>
+
+                    <button class="btn-primary" id="btn-authenticate" type="button">
+                        <span id="btn-label">⚡ AUTHENTICATE</span>
+                    </button>
+
+                    <div class="lockout-bar-wrap" id="lockout-bar-wrap" aria-hidden="true">
+                        <div class="lockout-bar" id="lockout-bar"></div>
+                    </div>
+
+                    <div class="error-msg hidden" id="error-msg" role="alert" aria-live="assertive">
+                        <span>⛔</span>
+                        <span id="error-text">Invalid security key.</span>
+                    </div>
+
+                    <div class="status-row">
+                        <div class="status-dot" aria-hidden="true"></div>
+                        <span>AES-256 · NO TRACKING · PRIVACY FIRST</span>
+                    </div>
+
+                    <div class="log-toggle" id="log-toggle" role="button" tabindex="0" aria-expanded="false"
+                        aria-controls="access-log">
+                        ▸ Access Log ◂
+                    </div>
+                    <div class="access-log" id="access-log" role="log" aria-live="polite"></div>
+
+                </div><!-- /tab-login -->
+
+                <!-- ENCRYPT TAB -->
+                <div class="tab-panel" id="tab-encrypt" role="tabpanel">
+
+                    <div class="panel-title">▸ Encrypt Content ◂</div>
+
+                    <!-- Mode -->
+                    <div class="mode-selector">
+                        <button class="mode-btn active" id="mode-multi" type="button">
+                            👥 Multi-User
+                        </button>
+                        <button class="mode-btn" id="mode-single" type="button">
+                            👤 Single
+                        </button>
+                    </div>
+
+                    <!-- Auto-lock -->
+                    <div class="autolock-row">
+                        <label for="autolock-select">⏱ Auto-Lock</label>
+                        <select id="autolock-select">
+                            <option value="0" selected>Disabled</option>
+                            <option value="60">1 minute</option>
+                            <option value="120">2 minutes</option>
+                            <option value="300">5 minutes</option>
+                            <option value="600">10 minutes</option>
+                            <option value="1800">30 minutes</option>
+                            <option value="3600">1 hour</option>
+                        </select>
+                    </div>
+
+                    <!-- Multi-user section -->
+                    <div id="multi-user-section">
+                        <div class="encrypt-section-title">
+                            <span>👥</span> User Entries
+                        </div>
+                        <div id="user-entries-container"></div>
+                        <button class="btn-add-user" id="btn-add-user" type="button">
+                            + Add Another User
+                        </button>
+                    </div>
+
+                    <!-- Single user section -->
+                    <div id="single-user-section" style="display:none;">
+                        <div class="field-group">
+                            <label class="field-label">
+                                Password
+                                <span class="field-required">*</span>
+                            </label>
+                            <div class="field-wrap">
+                                <span class="field-icon">🔑</span>
+                                <input type="password" id="single-password" placeholder="Encryption password…"
+                                    autocomplete="new-password" />
+                            </div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">
+                                Content (JSON or HTML)
+                                <span class="field-required">*</span>
+                            </label>
+                            <textarea id="single-content" class="content-textarea"
+                                placeholder='{"title":"My Site","sections":[...]}&#10;&#10;OR raw HTML:&#10;<h1>Title</h1><p>Content</p>'></textarea>
+                        </div>
+                    </div>
+
+                    <button class="btn-primary" id="btn-encrypt" type="button">
+                        <span id="encrypt-btn-label">🔐 GENERATE ENCRYPTED JSON</span>
+                    </button>
+
+                    <div class="output-label" id="output-label">
+                        📋 Copy this → paste into encrypted-content.json
+                    </div>
+                    <div class="output-box" id="output-box"></div>
+
+                    <button class="btn-copy-output" id="btn-copy-output" type="button">
+                        📋 Copy JSON
+                    </button>
+
+                    <button class="btn-secondary" id="btn-download-json" type="button" style="display:none;">
+                        ⬇ Download encrypted-content.json
+                    </button>
+
+                    <div class="error-msg hidden" id="encrypt-error">
+                        <span>⛔</span>
+                        <span id="encrypt-error-text">Please fill all fields.</span>
+                    </div>
+
+                    <div class="success-msg hidden" id="encrypt-success">
+                        <span>✅</span>
+                        <span>JSON generated! Copy it into encrypted-content.json and reload.</span>
+                    </div>
+
+                    <div class="privacy-badge">
+                        <span>🛡️</span>
+                        <span>Everything runs in your browser only.
+                            No data leaves your device. No tracking. Privacy first.</span>
+                    </div>
+
+                </div><!-- /tab-encrypt -->
+
+            </div><!-- /.auth-panel -->
+        </div><!-- /.lock-inner -->
+    </main>
+
+    <!-- ═══════════════════════════════════
+       APP CONTENT
+  ═══════════════════════════════════ -->
+    <div id="app-content" aria-hidden="true">
+
+        <nav class="top-bar" role="navigation" aria-label="Session controls">
+            <div class="top-bar-brand">⬡ KEYFORGE · SECURE SESSION</div>
+            <div class="top-bar-right">
+                <span class="session-user" id="session-user-label" aria-live="polite"></span>
+                <button class="btn-lock" id="btn-lock-now" type="button" aria-label="Lock session">
+                    🔒 LOCK
+                </button>
+            </div>
+        </nav>
+
+        <div id="rendered-content" role="main"></div>
+
+        <footer class="brand-footer">
+            <div>
+                <span class="footer-protocol">
+                    Powered by KeyForge Security Protocol v3.0
+                </span>
+            </div>
+            <div class="footer-links">
+                <span>Built by
+                    <a href="https://github.com/SudhirDevOps1" target="_blank" rel="noopener noreferrer">
+                        Sudhir Kumar (@SudhirDevOps1)
+                    </a>
+                </span>
+                <span style="opacity:.3">·</span>
+                <span>© 2024 MIT License</span>
+                <span style="opacity:.3">·</span>
+                <span style="color:var(--neon-green);font-size:.65rem;">
+                    🛡️ No Tracking · Privacy First
+                </span>
+            </div>
+        </footer>
+
+    </div><!-- /#app-content -->
+
+    <!-- ═══════════════════════════════════
+       AUTH ENGINE v3.0 — ALL BUGS FIXED
+  ═══════════════════════════════════ -->
+    <script>
+        ; (function KeyForgeAuth() {
+            'use strict';
+
+            /* ─── CONFIG ─────────────────────────────────────────── */
+            const CONFIG = {
+                contentFile: 'encrypted-content.json',
+                autoLockSeconds: 0,
+                maxAttempts: 5,
+                lockoutSeconds: 30,
+                showAccessLog: true,
+                maxLogEntries: 50,
+                particleCount: 18,
+            };
+
+            /* ─── SESSION ─────────────────────────────────────────── */
+            const SESSION = {
+                active: false,
+                username: null,
+                barInterval: null,
+                timeLeft: 0,
+            };
+
+            /* ─── LOG ─────────────────────────────────────────────── */
+            const ACCESS_LOG = [];
+
+            /* ─── ATTEMPT TRACKING ────────────────────────────────── */
+            let failedAttempts = 0;
+            let lockoutUntil = 0;
+            let lockoutInterval = null;
+
+            /* ─── DOM REFS ────────────────────────────────────────── */
+            const $ = id => document.getElementById(id);
+
+            const DOM = {
+                lockScreen: $('lock-screen'),
+                appContent: $('app-content'),
+                usernameInput: $('username-input'),
+                passwordInput: $('password-input'),
+                togglePw: $('toggle-pw'),
+                btnAuth: $('btn-authenticate'),
+                btnLabel: $('btn-label'),
+                errorMsg: $('error-msg'),
+                errorText: $('error-text'),
+                renderedContent: $('rendered-content'),
+                sessionUserLabel: $('session-user-label'),
+                btnLockNow: $('btn-lock-now'),
+                logToggle: $('log-toggle'),
+                accessLog: $('access-log'),
+                utilBar: $('util-bar'),
+                sessionBar: $('session-bar'),
+                sessionBadge: $('session-badge'),
+                lockoutBarWrap: $('lockout-bar-wrap'),
+                lockoutBar: $('lockout-bar'),
+                particlesWrap: $('particles-wrap'),
+                nukeBtn: $('nuke-btn'),
+                nukeModal: $('nuke-modal'),
+                nukeConfirm: $('nuke-confirm'),
+                nukeCancel: $('nuke-cancel'),
+                tabLoginBtn: $('tab-login-btn'),
+                tabEncryptBtn: $('tab-encrypt-btn'),
+                tabLogin: $('tab-login'),
+                tabEncrypt: $('tab-encrypt'),
+                modeMulti: $('mode-multi'),
+                modeSingle: $('mode-single'),
+                multiSection: $('multi-user-section'),
+                singleSection: $('single-user-section'),
+                userContainer: $('user-entries-container'),
+                btnAddUser: $('btn-add-user'),
+                btnEncrypt: $('btn-encrypt'),
+                encryptBtnLabel: $('encrypt-btn-label'),
+                outputLabel: $('output-label'),
+                outputBox: $('output-box'),
+                btnCopyOutput: $('btn-copy-output'),
+                btnDownloadJson: $('btn-download-json'),
+                encryptError: $('encrypt-error'),
+                encryptErrorText: $('encrypt-error-text'),
+                encryptSuccess: $('encrypt-success'),
+                autolockSelect: $('autolock-select'),
+                singlePassword: $('single-password'),
+                singleContent: $('single-content'),
+            };
+
+            /* ═══════════════════════════════════════════════════════
+               CRYPTO
+            ═══════════════════════════════════════════════════════ */
+            const Crypto = {
+                decrypt(ciphertext, passphrase) {
+                    try {
+                        const bytes = CryptoJS.AES.decrypt(ciphertext, passphrase);
+                        const plain = bytes.toString(CryptoJS.enc.Utf8);
+                        return plain.length > 0 ? plain : null;
+                    } catch { return null; }
+                },
+                encrypt(plaintext, passphrase) {
+                    return CryptoJS.AES.encrypt(plaintext, passphrase).toString();
+                },
+            };
+
+            /* ═══════════════════════════════════════════════════════
+               CONTENT LOADER — BUG FIX: Username + Password BOTH required
+            ═══════════════════════════════════════════════════════ */
+            const ContentLoader = {
+                _raw: null,
+
+                async fetch() {
+                    if (this._raw) return this._raw;
+                    const res = await window.fetch(CONFIG.contentFile);
+                    if (!res.ok) throw new Error(`HTTP ${res.status} — ${CONFIG.contentFile}`);
+                    this._raw = await res.json();
+                    return this._raw;
+                },
+
+                async tryDecrypt(password, username) {
+                    const payload = await this.fetch();
+
+                    /* ── MULTI-USER MODE ── */
+                    if (payload.users && Array.isArray(payload.users)) {
+
+                        /* FIX: Find entry where USERNAME matches (case-insensitive) */
+                        const matchedEntry = payload.users.find(entry =>
+                            entry.username.trim().toLowerCase() ===
+                            username.trim().toLowerCase()
+                        );
+
+                        /* FIX: If username not found → deny immediately */
+                        if (!matchedEntry) return null;
+
+                        /* FIX: Username found — now try password */
+                        const plain = Crypto.decrypt(matchedEntry.ciphertext, password);
+
+                        /* FIX: Wrong password → deny */
+                        if (!plain) return null;
+
+                        /* FIX: Both match → SUCCESS */
+                        try {
+                            return {
+                                user: matchedEntry.username,
+                                content: JSON.parse(plain),
+                            };
+                        } catch {
+                            return null;
+                        }
+                    }
+
+                    /* ── SINGLE USER MODE ── (no username check) */
+                    const plain = Crypto.decrypt(payload.ciphertext, password);
+                    if (!plain) return null;
+
+                    try {
+                        return { user: username || 'USER', content: JSON.parse(plain) };
+                    } catch {
+                        return null;
+                    }
+                },
+
+                clearCache() {
+                    this._raw = null;
+                },
+            };
+
+            /* ═══════════════════════════════════════════════════════
+               RENDERER
+            ═══════════════════════════════════════════════════════ */
+            const Renderer = {
+                render(content, container) {
+                    container.innerHTML = '';
+
+                    if (content.html) {
+                        container.innerHTML = content.html;
+                        return;
+                    }
+
+                    if (content.title) {
+                        const h1 = document.createElement('h1');
+                        h1.textContent = content.title;
+                        container.appendChild(h1);
+                    }
+
+                    if (content.description) {
+                        const p = document.createElement('p');
+                        p.textContent = content.description;
+                        container.appendChild(p);
+                    }
+
+                    if (Array.isArray(content.sections)) {
+                        content.sections.forEach(sec => this._section(sec, container));
+                    }
+                },
+
+                _section(sec, container) {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+
+                    if (sec.heading) {
+                        const h2 = document.createElement('h2');
+                        h2.textContent = sec.heading;
+                        card.appendChild(h2);
+                    }
+                    if (sec.body) {
+                        const p = document.createElement('p');
+                        p.textContent = sec.body;
+                        card.appendChild(p);
+                    }
+                    if (Array.isArray(sec.tags)) {
+                        const wrap = document.createElement('div');
+                        wrap.style.marginTop = '8px';
+                        sec.tags.forEach(t => {
+                            const span = document.createElement('span');
+                            span.className = 'tag';
+                            span.textContent = t;
+                            wrap.appendChild(span);
+                        });
+                        card.appendChild(wrap);
+                    }
+                    if (Array.isArray(sec.list)) {
+                        const ul = document.createElement('ul');
+                        sec.list.forEach(item => {
+                            const li = document.createElement('li');
+                            li.textContent = item;
+                            ul.appendChild(li);
+                        });
+                        card.appendChild(ul);
+                    }
+                    container.appendChild(card);
+                },
+            };
+
+            /* ═══════════════════════════════════════════════════════
+               LOG
+            ═══════════════════════════════════════════════════════ */
+            const Log = {
+                add(type, message) {
+                    ACCESS_LOG.unshift({
+                        ts: new Date().toISOString(),
+                        type,
+                        message,
+                    });
+                    if (ACCESS_LOG.length > CONFIG.maxLogEntries) ACCESS_LOG.pop();
+                    this._render();
+                },
+                _render() {
+                    DOM.accessLog.innerHTML = ACCESS_LOG.map(e => `
+          <div class="log-entry">
+            <span class="${e.type === 'ok' ? 'log-ok' :
+                            e.type === 'err' ? 'log-err' : 'log-info'
+                        }">${e.type === 'ok' ? '✔' :
+                            e.type === 'err' ? '✘' : '·'
+                        }</span>
+            &nbsp;<span style="opacity:.45">${e.ts.slice(11, 19)}</span>
+            &nbsp;— ${this._esc(e.message)}
+          </div>`).join('');
+                },
+                _esc(s) {
+                    return String(s)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+                },
+                clear() {
+                    ACCESS_LOG.length = 0;
+                    DOM.accessLog.innerHTML = '';
+                },
+            };
+
+            /* ═══════════════════════════════════════════════════════
+               AUTO-LOCK TIMER — BUG FIX: 0 pe bar nahi dikhega
+            ═══════════════════════════════════════════════════════ */
+            const Timer = {
+                start() {
+                    this.clear();
+                    const secs = parseInt(DOM.autolockSelect.value, 10) || 0;
+                    CONFIG.autoLockSeconds = secs;
+
+                    /* FIX: 0 means disabled — hide bar completely */
+                    if (!secs) {
+                        DOM.utilBar.style.display = 'none';
+                        DOM.sessionBadge.style.display = 'none';
+                        return;
+                    }
+
+                    SESSION.timeLeft = secs;
+                    DOM.utilBar.style.display = 'block';
+                    DOM.sessionBadge.style.display = 'block';
+                    DOM.sessionBar.style.width = '100%';
+                    DOM.sessionBar.style.background =
+                        'linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta))';
+
+                    SESSION.barInterval = setInterval(() => {
+                        SESSION.timeLeft = Math.max(0, SESSION.timeLeft - 1);
+                        const pct = (SESSION.timeLeft / secs) * 100;
+                        DOM.sessionBar.style.width = pct + '%';
+
+                        const mins = Math.floor(SESSION.timeLeft / 60);
+                        const s = SESSION.timeLeft % 60;
+                        DOM.sessionBadge.textContent = mins > 0
+                            ? `⏱ ${mins}m ${s}s`
+                            : `⏱ ${SESSION.timeLeft}s`;
+
+                        if (SESSION.timeLeft <= 30) {
+                            DOM.sessionBar.style.background =
+                                'linear-gradient(90deg, var(--neon-yellow), var(--neon-red))';
+                        }
+
+                        if (SESSION.timeLeft <= 0) {
+                            Log.add('info', 'Session auto-locked after timeout.');
+                            Auth.lock();
+                        }
+                    }, 1000);
+                },
+
+                reset() {
+                    if (!CONFIG.autoLockSeconds || !SESSION.active) return;
+                    SESSION.timeLeft = CONFIG.autoLockSeconds;
+                    DOM.sessionBar.style.background =
+                        'linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta))';
+                },
+
+                clear() {
+                    clearInterval(SESSION.barInterval);
+                    SESSION.barInterval = null;
+                    DOM.utilBar.style.display = 'none';
+                    DOM.sessionBadge.style.display = 'none';
+                },
+            };
+
+            /* ═══════════════════════════════════════════════════════
+               LOCKOUT VISUAL
+            ═══════════════════════════════════════════════════════ */
+            function startLockoutVisual(seconds) {
+                clearInterval(lockoutInterval);
+                let remaining = seconds;
+                DOM.lockoutBarWrap.classList.add('visible');
+                DOM.lockoutBar.style.width = '100%';
+
+                lockoutInterval = setInterval(() => {
+                    remaining = Math.max(0, remaining - 1);
+                    DOM.lockoutBar.style.width = (remaining / seconds * 100) + '%';
+                    if (remaining <= 0) {
+                        clearInterval(lockoutInterval);
+                        DOM.lockoutBarWrap.classList.remove('visible');
+                    }
+                }, 1000);
+            }
+
+            /* ═══════════════════════════════════════════════════════
+               AUTH CONTROLLER — ALL BUGS FIXED
+            ═══════════════════════════════════════════════════════ */
+            const Auth = {
+
+                async authenticate() {
+
+                    /* ── Lockout check ── */
+                    const now = Date.now();
+                    if (now < lockoutUntil) {
+                        const wait = Math.ceil((lockoutUntil - now) / 1000);
+                        UI.showError(`Too many attempts. Wait ${wait}s before retrying.`);
+                        return;
+                    }
+
+                    const password = DOM.passwordInput.value;
+                    const username = DOM.usernameInput.value.trim();
+
+                    /* FIX: Username REQUIRED — cannot be empty */
+                    if (!username) {
+                        UI.showError('Access Identity (username) is required.');
+                        DOM.usernameInput.setAttribute('aria-invalid', 'true');
+                        DOM.usernameInput.focus();
+                        return;
+                    }
+
+                    /* FIX: Password REQUIRED — cannot be empty */
+                    if (!password) {
+                        UI.showError('Security key (password) is required.');
+                        DOM.passwordInput.setAttribute('aria-invalid', 'true');
+                        DOM.passwordInput.focus();
+                        return;
+                    }
+
+                    /* Reset invalid states */
+                    DOM.usernameInput.removeAttribute('aria-invalid');
+                    DOM.passwordInput.removeAttribute('aria-invalid');
+
+                    UI.setLoading(true);
+                    UI.hideError();
+
+                    try {
+                        /* FIX: Pass both username AND password */
+                        const result = await ContentLoader.tryDecrypt(password, username);
+
+                        if (!result) {
+                            failedAttempts++;
+                            Log.add('err',
+                                `AUTH FAIL — "${username}" ` +
+                                `(attempt ${failedAttempts}/${CONFIG.maxAttempts})`
+                            );
+
+                            if (failedAttempts >= CONFIG.maxAttempts) {
+                                lockoutUntil = Date.now() + CONFIG.lockoutSeconds * 1000;
+                                failedAttempts = 0;
+                                UI.showError(
+                                    `Max attempts reached. Locked for ${CONFIG.lockoutSeconds}s.`
+                                );
+                                startLockoutVisual(CONFIG.lockoutSeconds);
+                            } else {
+                                const rem = CONFIG.maxAttempts - failedAttempts;
+                                /* FIX: Vague error — don't reveal if username or password is wrong */
+                                UI.showError(
+                                    `Invalid username or password. ` +
+                                    `${rem} attempt${rem !== 1 ? 's' : ''} remaining.`
+                                );
+                            }
+
+                            UI.setLoading(false);
+                            DOM.passwordInput.value = '';
+                            DOM.passwordInput.focus();
+                            return;
+                        }
+
+                        /* ── SUCCESS ── */
+                        failedAttempts = 0;
+                        SESSION.active = true;
+                        SESSION.username = result.user || username;
+
+                        Log.add('ok',
+                            `AUTH OK — "${SESSION.username}" — ` +
+                            `${new Date().toLocaleTimeString()}`
+                        );
+
+                        DOM.passwordInput.value = '';
+                        DOM.usernameInput.value = '';
+
+                        Renderer.render(result.content, DOM.renderedContent);
+                        this._unlockTransition(SESSION.username);
+                        Timer.start();
+
+                    } catch (err) {
+                        Log.add('err', `SYSTEM ERROR — ${err.message}`);
+                        UI.showError(
+                            'Content load failed. Ensure encrypted-content.json exists.'
+                        );
+                        console.error('[KeyForge]', err);
+                        UI.setLoading(false);
+                    }
+                },
+
+                lock() {
+                    SESSION.active = false;
+                    SESSION.username = null;
+                    Timer.clear();
+
+                    DOM.renderedContent.innerHTML = '';
+                    DOM.appContent.classList.remove('visible');
+                    DOM.appContent.setAttribute('aria-hidden', 'true');
+                    DOM.lockScreen.classList.remove('hidden');
+                    DOM.lockScreen.removeAttribute('aria-hidden');
+                    DOM.sessionUserLabel.textContent = '';
+                    DOM.nukeBtn.style.display = 'none';
+
+                    setTimeout(() => DOM.usernameInput.focus(), 300);
+                    Log.add('info', 'Session locked.');
+                },
+
+                /* FIX: Nuke clears ContentLoader cache too */
+                nuke() {
+                    DOM.nukeModal.classList.remove('visible');
+
+                    const flash = document.createElement('div');
+                    flash.className = 'nuke-flash';
+                    document.body.appendChild(flash);
+                    setTimeout(() => flash.remove(), 800);
+
+                    SESSION.active = false;
+                    SESSION.username = null;
+                    Timer.clear();
+                    Log.clear();
+                    ContentLoader.clearCache(); /* FIX: was missing */
+
+                    DOM.renderedContent.innerHTML = '';
+                    DOM.passwordInput.value = '';
+                    DOM.usernameInput.value = '';
+                    DOM.appContent.classList.remove('visible');
+                    DOM.appContent.setAttribute('aria-hidden', 'true');
+                    DOM.lockScreen.classList.remove('hidden');
+                    DOM.lockScreen.removeAttribute('aria-hidden');
+                    DOM.sessionUserLabel.textContent = '';
+                    DOM.nukeBtn.style.display = 'none';
+
+                    setTimeout(() => DOM.usernameInput.focus(), 500);
+                },
+
+                _unlockTransition(username) {
+                    const flash = document.createElement('div');
+                    flash.className = 'unlock-flash';
+                    document.body.appendChild(flash);
+                    setTimeout(() => flash.remove(), 600);
+
+                    DOM.lockScreen.classList.add('hidden');
+                    DOM.lockScreen.setAttribute('aria-hidden', 'true');
+                    DOM.sessionUserLabel.textContent = `◈ ${username}`;
+                    DOM.nukeBtn.style.display = 'flex';
+
+                    setTimeout(() => {
+                        DOM.appContent.classList.add('visible');
+                        DOM.appContent.removeAttribute('aria-hidden');
+                        UI.setLoading(false);
+                    }, 380);
+                },
+            };
+
+            /* ═══════════════════════════════════════════════════════
+               UI HELPERS
+            ═══════════════════════════════════════════════════════ */
+            const UI = {
+                showError(msg) {
+                    DOM.errorText.textContent = msg;
+                    DOM.errorMsg.classList.remove('hidden');
+                    DOM.errorMsg.classList.remove('shake');
+                    void DOM.errorMsg.offsetWidth;
+                    DOM.errorMsg.classList.add('shake');
+                },
+                hideError() {
+                    DOM.errorMsg.classList.add('hidden');
+                },
+                setLoading(on) {
+                    if (on) {
+                        DOM.btnLabel.innerHTML =
+                            '<span class="spinner" aria-hidden="true"></span>VERIFYING…';
+                        DOM.btnAuth.disabled = true;
+                        DOM.btnAuth.setAttribute('aria-busy', 'true');
+                    } else {
+                        DOM.btnLabel.innerHTML = '⚡ AUTHENTICATE';
+                        DOM.btnAuth.disabled = false;
+                        DOM.btnAuth.removeAttribute('aria-busy');
+                    }
+                },
+            };
+
+            /* ═══════════════════════════════════════════════════════
+               ENCRYPT TAB — USER ENTRY BUILDER
+               FIX: Username required, duplicate check, empty check
+            ═══════════════════════════════════════════════════════ */
+            let userCount = 0;
+            let encryptMode = 'multi';
+
+            function createUserEntry() {
+                userCount++;
+                const id = userCount;
+                const block = document.createElement('div');
+                block.className = 'user-entry-block';
+                block.dataset.uid = id;
+
+                block.innerHTML = `
+        <div class="user-entry-label">
+          <span>User ${id}</span>
+          ${id > 1
+                        ? `<button class="btn-remove-user" type="button"
+                       title="Remove User ${id}">✕ Remove</button>`
+                        : ''}
+        </div>
+        <div class="user-field-row">
+          <input type="text"
+                 class="u-username"
+                 placeholder="Username * (e.g. ADMIN)"
+                 autocorrect="off"
+                 autocapitalize="characters"
+                 spellcheck="false"
+                 required />
+          <input type="password"
+                 class="u-password"
+                 placeholder="Password *"
+                 autocomplete="new-password"
+                 required />
+        </div>
+        <textarea class="u-content content-textarea"
+                  placeholder='Content * — JSON or HTML:&#10;{"title":"...","sections":[...]}&#10;&#10;OR:&#10;<h1>Title</h1><p>Content</p>'
+                  required></textarea>
+      `;
+
+                const removeBtn = block.querySelector('.btn-remove-user');
+                if (removeBtn) {
+                    removeBtn.addEventListener('click', () => block.remove());
+                }
+
+                DOM.userContainer.appendChild(block);
+
+                /* Focus username of new entry */
+                setTimeout(() => {
+                    block.querySelector('.u-username').focus();
+                }, 50);
+            }
+
+            /* ── ENCRYPT RUNNER — BUG FIX: All validations ── */
+            function runEncrypt() {
+
+                /* Reset output area */
+                DOM.encryptError.classList.add('hidden');
+                DOM.encryptSuccess.classList.add('hidden');
+                DOM.outputBox.classList.remove('visible');
+                DOM.outputLabel.classList.remove('visible');
+                DOM.btnCopyOutput.classList.remove('visible');
+                DOM.btnDownloadJson.style.display = 'none';
+
+                let jsonOutput = '';
+
+                /* ── SINGLE MODE ── */
+                if (encryptMode === 'single') {
+                    const pw = DOM.singlePassword.value.trim();
+                    const content = DOM.singleContent.value.trim();
+
+                    if (!pw) {
+                        DOM.encryptErrorText.textContent = 'Password is required.';
+                        DOM.encryptError.classList.remove('hidden');
+                        DOM.singlePassword.focus();
+                        return;
+                    }
+
+                    if (!content) {
+                        DOM.encryptErrorText.textContent = 'Content is required.';
+                        DOM.encryptError.classList.remove('hidden');
+                        DOM.singleContent.focus();
+                        return;
+                    }
+
+                    let contentObj;
+                    try {
+                        contentObj = JSON.parse(content);
+                    } catch {
+                        contentObj = { html: content };
+                    }
+
+                    const ciphertext = Crypto.encrypt(
+                        JSON.stringify(contentObj), pw
+                    );
+                    jsonOutput = JSON.stringify({ ciphertext }, null, 2);
+
+                    /* ── MULTI-USER MODE ── */
+                } else {
+                    const entries = DOM.userContainer.querySelectorAll('.user-entry-block');
+
+                    if (entries.length === 0) {
+                        DOM.encryptErrorText.textContent =
+                            'Add at least one user entry.';
+                        DOM.encryptError.classList.remove('hidden');
+                        return;
+                    }
+
+                    const users = [];
+                    let errorMsg = '';
+                    let valid = true;
+
+                    for (let idx = 0; idx < entries.length; idx++) {
+                        const entry = entries[idx];
+                        const username = entry.querySelector('.u-username').value.trim();
+                        const password = entry.querySelector('.u-password').value.trim();
+                        const rawContent = entry.querySelector('.u-content').value.trim();
+
+                        /* FIX: Username required */
+                        if (!username) {
+                            errorMsg = `User ${idx + 1}: Username is required.`;
+                            valid = false;
+                            entry.querySelector('.u-username').focus();
+                            break;
+                        }
+
+                        /* FIX: Password required */
+                        if (!password) {
+                            errorMsg = `User ${idx + 1} (${username}): Password is required.`;
+                            valid = false;
+                            entry.querySelector('.u-password').focus();
+                            break;
+                        }
+
+                        /* FIX: Content required */
+                        if (!rawContent) {
+                            errorMsg = `User ${idx + 1} (${username}): Content is required.`;
+                            valid = false;
+                            entry.querySelector('.u-content').focus();
+                            break;
+                        }
+
+                        /* FIX: Duplicate username check */
+                        const duplicate = users.some(
+                            u => u.username.toLowerCase() === username.toLowerCase()
+                        );
+
+                        if (duplicate) {
+                            errorMsg = `Duplicate username "${username}". Each user must have a unique username.`;
+                            valid = false;
+                            entry.querySelector('.u-username').focus();
+                            break;
+                        }
+
+                        /* All good — encrypt this user */
+                        let contentObj;
+                        try {
+                            contentObj = JSON.parse(rawContent);
+                        } catch {
+                            contentObj = { html: rawContent };
+                        }
+
+                        const ciphertext = Crypto.encrypt(
+                            JSON.stringify(contentObj), password
+                        );
+
+                        users.push({ username, ciphertext });
+                    }
+
+                    if (!valid) {
+                        DOM.encryptErrorText.textContent = errorMsg;
+                        DOM.encryptError.classList.remove('hidden');
+                        return;
+                    }
+
+                    jsonOutput = JSON.stringify({ users }, null, 2);
+                }
+
+                /* ── Show output ── */
+                DOM.outputBox.textContent = jsonOutput;
+                DOM.outputBox.classList.add('visible');
+                DOM.outputLabel.classList.add('visible');
+                DOM.btnCopyOutput.classList.add('visible');
+                DOM.btnDownloadJson.style.display = 'block';
+                DOM.encryptSuccess.classList.remove('hidden');
+                DOM.btnDownloadJson._jsonOutput = jsonOutput;
+
+                Log.add('ok', `Encrypted JSON generated (${encryptMode} mode)`);
+            }
+
+            /* ═══════════════════════════════════════════════════════
+               PARTICLES
+            ═══════════════════════════════════════════════════════ */
+            function initParticles() {
+                if (!DOM.particlesWrap) return;
+                if (window.matchMedia('(max-width: 768px)').matches) return;
+
+                for (let i = 0; i < CONFIG.particleCount; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'particle';
+                    const color = Math.random() > .5
+                        ? 'var(--neon-cyan)'
+                        : 'var(--neon-magenta)';
+                    p.style.cssText = `
+          width:${Math.random() * 3 + 1}px;
+          height:${Math.random() * 3 + 1}px;
+          left:${Math.random() * 100}%;
+          animation-duration:${Math.random() * 8 + 8}s;
+          animation-delay:${Math.random() * 12}s;
+          background:${color};
+        `;
+                    DOM.particlesWrap.appendChild(p);
+                }
+            }
+
+            /* ═══════════════════════════════════════════════════════
+               EVENT BINDING
+            ═══════════════════════════════════════════════════════ */
+            function bindEvents() {
+
+                /* ── Login ── */
+                DOM.btnAuth.addEventListener('click', () => Auth.authenticate());
+
+                DOM.passwordInput.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') Auth.authenticate();
+                });
+
+                DOM.usernameInput.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') DOM.passwordInput.focus();
+                });
+
+                /* Clear invalid state on input */
+                DOM.usernameInput.addEventListener('input', () => {
+                    DOM.usernameInput.removeAttribute('aria-invalid');
+                });
+
+                DOM.passwordInput.addEventListener('input', () => {
+                    DOM.passwordInput.removeAttribute('aria-invalid');
+                });
+
+                /* ── Password visibility ── */
+                DOM.togglePw.addEventListener('click', () => {
+                    const isPw = DOM.passwordInput.type === 'password';
+                    DOM.passwordInput.type = isPw ? 'text' : 'password';
+                    DOM.togglePw.textContent = isPw ? '🙈' : '👁';
+                    DOM.togglePw.setAttribute('aria-label',
+                        isPw ? 'Hide password' : 'Show password'
+                    );
+                });
+
+                /* ── Lock ── */
+                DOM.btnLockNow.addEventListener('click', () => Auth.lock());
+
+                /* ── Access log toggle ── */
+                if (CONFIG.showAccessLog) {
+                    const toggleLog = () => {
+                        const visible = DOM.accessLog.classList.toggle('visible');
+                        DOM.logToggle.textContent = visible
+                            ? '▾ Access Log ▾'
+                            : '▸ Access Log ◂';
+                        DOM.logToggle.setAttribute('aria-expanded', String(visible));
+                    };
+                    DOM.logToggle.addEventListener('click', toggleLog);
+                    DOM.logToggle.addEventListener('keydown', e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleLog();
+                        }
+                    });
+                } else {
+                    DOM.logToggle.style.display = 'none';
+                }
+
+                /* ── Activity → timer reset ── */
+                ['mousemove', 'keydown', 'touchstart', 'scroll', 'click'].forEach(evt => {
+                    document.addEventListener(evt, () => Timer.reset(), { passive: true });
+                });
+
+                /* ── Tab switching ── */
+                DOM.tabLoginBtn.addEventListener('click', () => {
+                    DOM.tabLoginBtn.classList.add('active');
+                    DOM.tabEncryptBtn.classList.remove('active');
+                    DOM.tabLogin.classList.add('active');
+                    DOM.tabEncrypt.classList.remove('active');
+                    DOM.tabLoginBtn.setAttribute('aria-selected', 'true');
+                    DOM.tabEncryptBtn.setAttribute('aria-selected', 'false');
+                    setTimeout(() => DOM.usernameInput.focus(), 100);
+                });
+
+                DOM.tabEncryptBtn.addEventListener('click', () => {
+                    DOM.tabEncryptBtn.classList.add('active');
+                    DOM.tabLoginBtn.classList.remove('active');
+                    DOM.tabEncrypt.classList.add('active');
+                    DOM.tabLogin.classList.remove('active');
+                    DOM.tabEncryptBtn.setAttribute('aria-selected', 'true');
+                    DOM.tabLoginBtn.setAttribute('aria-selected', 'false');
+                });
+
+                /* ── Mode switching ── */
+                DOM.modeMulti.addEventListener('click', () => {
+                    encryptMode = 'multi';
+                    DOM.modeMulti.classList.add('active');
+                    DOM.modeSingle.classList.remove('active');
+                    DOM.multiSection.style.display = 'block';
+                    DOM.singleSection.style.display = 'none';
+                });
+
+                DOM.modeSingle.addEventListener('click', () => {
+                    encryptMode = 'single';
+                    DOM.modeSingle.classList.add('active');
+                    DOM.modeMulti.classList.remove('active');
+                    DOM.singleSection.style.display = 'block';
+                    DOM.multiSection.style.display = 'none';
+                });
+
+                /* ── Add user ── */
+                DOM.btnAddUser.addEventListener('click', () => createUserEntry());
+
+                /* ── Generate encrypted JSON ── */
+                DOM.btnEncrypt.addEventListener('click', () => runEncrypt());
+
+                /* ── Copy output ── */
+                DOM.btnCopyOutput.addEventListener('click', () => {
+                    const text = DOM.outputBox.textContent;
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(text).then(() => {
+                            DOM.btnCopyOutput.textContent = '✅ Copied!';
+                            setTimeout(() => {
+                                DOM.btnCopyOutput.textContent = '📋 Copy JSON';
+                            }, 2000);
+                        }).catch(() => fallbackCopy(text));
+                    } else {
+                        fallbackCopy(text);
+                    }
+                });
+
+                function fallbackCopy(text) {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0;';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    ta.remove();
+                    DOM.btnCopyOutput.textContent = '✅ Copied!';
+                    setTimeout(() => {
+                        DOM.btnCopyOutput.textContent = '📋 Copy JSON';
+                    }, 2000);
+                }
+
+                /* ── Download JSON ── */
+                DOM.btnDownloadJson.addEventListener('click', () => {
+                    const json = DOM.btnDownloadJson._jsonOutput;
+                    if (!json) return;
+                    const blob = new Blob([json], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'encrypted-content.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                });
+
+                /* ── NUKE ── */
+                DOM.nukeBtn.addEventListener('click', () => {
+                    DOM.nukeModal.classList.add('visible');
+                    DOM.nukeConfirm.focus();
+                });
+
+                DOM.nukeConfirm.addEventListener('click', () => Auth.nuke());
+
+                DOM.nukeCancel.addEventListener('click', () => {
+                    DOM.nukeModal.classList.remove('visible');
+                });
+
+                DOM.nukeModal.addEventListener('click', e => {
+                    if (e.target === DOM.nukeModal) {
+                        DOM.nukeModal.classList.remove('visible');
+                    }
+                });
+
+                /* ── Keyboard: Escape closes nuke modal ── */
+                document.addEventListener('keydown', e => {
+                    if (e.key === 'Escape') {
+                        DOM.nukeModal.classList.remove('visible');
+                    }
+                });
+
+                /* ── Visibility change ── */
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden && SESSION.active) {
+                        Log.add('info', 'Tab hidden — session active.');
+                    }
+                });
+
+                /* ── Back button → lock ── */
+                window.addEventListener('popstate', () => {
+                    if (SESSION.active) Auth.lock();
+                });
+            }
+
+            /* ═══════════════════════════════════════════════════════
+               PUBLIC API (console utility — still works)
+            ═══════════════════════════════════════════════════════ */
+            window.KeyForge = {
+                encryptSingle(content, password) {
+                    const ct = Crypto.encrypt(JSON.stringify(content), password);
+                    return JSON.stringify({ ciphertext: ct }, null, 2);
+                },
+                encryptMultiUser(users) {
+                    const entries = users.map(u => ({
+                        username: u.username,
+                        ciphertext: Crypto.encrypt(
+                            JSON.stringify(u.content), u.password
+                        ),
+                    }));
+                    return JSON.stringify({ users: entries }, null, 2);
+                },
+                generateSingle(content, password) {
+                    const json = this.encryptSingle(content, password);
+                    console.log(
+                        '%c[KeyForge] Copy into encrypted-content.json ↓',
+                        'color:#00fff5;font-weight:bold;font-size:13px'
+                    );
+                    console.log(json);
+                    return json;
+                },
+                generateMultiUser(users) {
+                    const json = this.encryptMultiUser(users);
+                    console.log(
+                        '%c[KeyForge] Copy into encrypted-content.json ↓',
+                        'color:#00fff5;font-weight:bold;font-size:13px'
+                    );
+                    console.log(json);
+                    return json;
+                },
+            };
+
+            /* ═══════════════════════════════════════════════════════
+               INIT
+            ═══════════════════════════════════════════════════════ */
+            function init() {
+                bindEvents();
+                initParticles();
+
+                /* Start with 2 user entries in encrypt tab */
+                createUserEntry();
+                createUserEntry();
+
+                Log.add('info',
+                    `KeyForge v3.0 · ${new Date().toLocaleString()} · Privacy First`
+                );
+
+                /* Prefetch content file */
+                ContentLoader.fetch().catch(() => {
+                    Log.add('err', 'Could not prefetch content file — check path.');
+                });
+
+                /* Smart focus */
+                if (window.innerWidth >= 768) {
+                    DOM.usernameInput.focus();
+                } else {
+                    setTimeout(() => DOM.usernameInput.focus(), 400);
+                }
+            }
+
+            /* Boot */
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+
+        })();
+    </script>
+
+</body>
+
+</html>
