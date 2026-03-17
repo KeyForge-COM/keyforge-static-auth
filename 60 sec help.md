@@ -1,4 +1,4 @@
----
+
 
 ## ⚡ 60 Second Quick Fix
 
@@ -19,4 +19,3 @@ Agar ab bhi nahi chala:
 → Console mein red errors dekho
 → File names exactly check karo
 ```
----
