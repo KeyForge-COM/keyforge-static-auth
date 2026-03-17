@@ -1,0 +1,1606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#050510" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>KeyForge Static-Auth</title>
+
+  <!-- CryptoJS CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+  <style>
+    /* ============================================================
+       RESET & BASE
+    ============================================================ */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --neon-cyan:      #00fff5;
+      --neon-magenta:   #ff00ff;
+      --neon-yellow:    #ffff00;
+      --neon-red:       #ff003c;
+      --neon-green:     #00ff88;
+      --neon-orange:    #ff8800;
+      --bg-dark:        #050510;
+      --bg-panel:       #0a0a1a;
+      --bg-input:       #0d0d22;
+      --border-dim:     #1a1a3a;
+      --text-primary:   #e0e0ff;
+      --text-dim:       #5a5a8a;
+      --font-mono:      'Courier New', Courier, monospace;
+
+      /* Responsive spacing */
+      --space-xs:  4px;
+      --space-sm:  8px;
+      --space-md:  16px;
+      --space-lg:  24px;
+      --space-xl:  40px;
+
+      /* Touch targets */
+      --touch-min: 44px;
+    }
+
+    html {
+      height: 100%;
+      /* Prevent zoom on input focus iOS */
+      font-size: 16px;
+    }
+
+    body {
+      min-height: 100%;
+      min-height: 100dvh;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ============================================================
+       ANIMATED GRID BACKGROUND
+    ============================================================ */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,255,245,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,245,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      animation: gridScroll 20s linear infinite;
+      pointer-events: none;
+      z-index: 0;
+      will-change: background-position;
+    }
+
+    @keyframes gridScroll {
+      0%   { background-position: 0 0; }
+      100% { background-position: 40px 40px; }
+    }
+
+    /* Scanline overlay — disabled on low-end via media */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,.12) 2px,
+        rgba(0,0,0,.12) 4px
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Reduce motion for accessibility */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+      }
+    }
+
+    /* ============================================================
+       TIMEOUT PROGRESS BAR
+    ============================================================ */
+    .timeout-bar-wrap {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      z-index: 1000;
+      background: rgba(255,255,255,.05);
+      display: none;
+    }
+
+    .timeout-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta));
+      width: 100%;
+      transition: width 1s linear;
+      box-shadow: 0 0 10px var(--neon-cyan);
+    }
+
+    /* Timer badge */
+    #timer-badge {
+      position: fixed;
+      top: 10px;
+      right: 12px;
+      z-index: 1001;
+      font-size: .65rem;
+      letter-spacing: .1em;
+      color: var(--text-dim);
+      background: rgba(5,5,16,.85);
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--border-dim);
+      display: none;
+      backdrop-filter: blur(6px);
+      white-space: nowrap;
+    }
+
+    /* ============================================================
+       LOCK SCREEN — RESPONSIVE
+    ============================================================ */
+    #lock-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      z-index: 100;
+      padding: clamp(16px, 4vw, 32px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      /* Safe area for notched phones */
+      padding-top: max(clamp(16px, 4vw, 32px), env(safe-area-inset-top));
+      padding-bottom: max(clamp(16px, 4vw, 32px), env(safe-area-inset-bottom));
+      padding-left: max(clamp(16px, 4vw, 32px), env(safe-area-inset-left));
+      padding-right: max(clamp(16px, 4vw, 32px), env(safe-area-inset-right));
+      transition: opacity .6s ease, transform .6s ease;
+      scroll-behavior: smooth;
+    }
+
+    /* Center content when it fits in viewport */
+    #lock-screen::before {
+      content: '';
+      flex: 1;
+      min-height: 20px;
+      max-height: 60px;
+    }
+    #lock-screen::after {
+      content: none; /* override body::after for this element */
+    }
+
+    #lock-screen.hidden {
+      opacity: 0;
+      transform: scale(1.04);
+      pointer-events: none;
+    }
+
+    /* Inner wrapper — centers everything */
+    .lock-inner {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(16px, 3vw, 28px);
+      padding-bottom: 20px;
+    }
+
+    /* ── Brand header ── */
+    .brand-header {
+      text-align: center;
+      animation: fadeInDown .8s ease both;
+    }
+
+    .brand-logo {
+      font-size: clamp(1.8rem, 7vw, 3.5rem);
+      font-weight: 900;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: drop-shadow(0 0 10px rgba(0,255,245,.6));
+      animation: logoPulse 3s ease-in-out infinite;
+      line-height: 1.1;
+    }
+
+    @keyframes logoPulse {
+      0%, 100% { filter: drop-shadow(0 0 10px rgba(0,255,245,.6)); }
+      50%       { filter: drop-shadow(0 0 24px rgba(255,0,255,.7)); }
+    }
+
+    .brand-tagline {
+      font-size: clamp(.6rem, 2vw, .75rem);
+      letter-spacing: .25em;
+      color: var(--neon-cyan);
+      text-transform: uppercase;
+      opacity: .7;
+      margin-top: 6px;
+      word-spacing: .1em;
+    }
+
+    /* ── Lock icon ── */
+    .lock-icon-wrap {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      animation: fadeInDown .8s .2s ease both;
+    }
+
+    /* Smaller on tiny screens */
+    @media (max-height: 600px) {
+      .lock-icon-wrap { width: 56px; height: 56px; }
+    }
+
+    .lock-icon {
+      font-size: clamp(2rem, 8vw, 3.2rem);
+      display: block;
+      text-align: center;
+      animation: lockPulse 2s ease-in-out infinite;
+      filter: drop-shadow(0 0 14px rgba(0,255,245,.8));
+      position: relative;
+      z-index: 1;
+      line-height: 1;
+    }
+
+    @keyframes lockPulse {
+      0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 14px rgba(0,255,245,.8)); }
+      50%       { transform: scale(1.12); filter: drop-shadow(0 0 28px rgba(255,0,255,.8)); }
+    }
+
+    .lock-ring {
+      position: absolute;
+      inset: -14px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--neon-cyan);
+      border-bottom-color: var(--neon-magenta);
+      animation: spinRing 3s linear infinite;
+    }
+
+    .lock-ring-2 {
+      inset: -26px;
+      border-top-color: var(--neon-magenta);
+      border-bottom-color: var(--neon-cyan);
+      animation-duration: 5s;
+      animation-direction: reverse;
+      border-width: 1px;
+    }
+
+    @keyframes spinRing {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Auth panel ── */
+    .auth-panel {
+      background: var(--bg-panel);
+      border: 1px solid rgba(0,255,245,.4);
+      border-radius: clamp(8px, 2vw, 14px);
+      padding: clamp(20px, 5vw, 44px) clamp(16px, 5vw, 48px);
+      width: 100%;
+      max-width: 460px;
+      position: relative;
+      animation: fadeInUp .8s .3s ease both;
+      box-shadow:
+        0 0 0 1px rgba(0,255,245,.08),
+        0 0 40px rgba(0,255,245,.08),
+        0 20px 60px rgba(0,0,0,.5),
+        inset 0 0 40px rgba(0,0,0,.4);
+    }
+
+    /* Corner accents */
+    .auth-panel::before,
+    .auth-panel::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-color: var(--neon-magenta);
+      border-style: solid;
+    }
+    .auth-panel::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-radius: 2px 0 0 0; }
+    .auth-panel::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-radius: 0 0 2px 0; }
+
+    .panel-title {
+      font-size: clamp(.75rem, 2.5vw, .95rem);
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--neon-cyan);
+      text-align: center;
+      margin-bottom: clamp(16px, 3vw, 28px);
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-dim);
+    }
+
+    /* ── Form elements ── */
+    .field-group {
+      margin-bottom: clamp(14px, 3vw, 20px);
+      position: relative;
+    }
+
+    .field-label {
+      display: block;
+      font-size: clamp(.62rem, 1.8vw, .7rem);
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      user-select: none;
+    }
+
+    .field-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .field-icon {
+      position: absolute;
+      left: 13px;
+      font-size: .95rem;
+      pointer-events: none;
+      z-index: 1;
+      line-height: 1;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      /* Minimum 16px to prevent iOS zoom */
+      font-size: max(16px, 1rem);
+      padding: clamp(12px, 2.5vw, 15px) 44px clamp(12px, 2.5vw, 15px) 44px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-dim);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      letter-spacing: .04em;
+      outline: none;
+      transition: border-color .3s, box-shadow .3s;
+      min-height: var(--touch-min);
+      /* Prevent appearance changes on iOS */
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    /* Scale down font-size in content area where zoom doesn't matter */
+    @media (min-width: 480px) {
+      input[type="text"],
+      input[type="password"] {
+        font-size: .95rem;
+      }
+    }
+
+    input:focus {
+      border-color: var(--neon-cyan);
+      box-shadow: 0 0 0 2px rgba(0,255,245,.15), 0 0 20px rgba(0,255,245,.08);
+    }
+
+    /* iOS placeholder color */
+    input::placeholder { color: var(--text-dim); opacity: 1; }
+
+    .toggle-pw {
+      position: absolute;
+      right: 4px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      color: var(--text-dim);
+      transition: color .2s;
+      padding: 0 10px;
+      line-height: 1;
+      min-width: var(--touch-min);
+      min-height: var(--touch-min);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .toggle-pw:hover { color: var(--neon-cyan); }
+    .toggle-pw:focus-visible {
+      outline: 1px solid var(--neon-cyan);
+      border-radius: 4px;
+    }
+
+    /* ── Auth button ── */
+    .btn-auth {
+      width: 100%;
+      padding: clamp(13px, 3vw, 16px);
+      background: linear-gradient(135deg, rgba(0,255,245,.08), rgba(255,0,255,.08));
+      border: 1px solid var(--neon-cyan);
+      border-radius: 6px;
+      color: var(--neon-cyan);
+      font-family: var(--font-mono);
+      font-size: clamp(.85rem, 2.5vw, 1rem);
+      font-weight: 700;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all .3s;
+      position: relative;
+      overflow: hidden;
+      margin-top: 6px;
+      min-height: var(--touch-min);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .btn-auth::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+      opacity: 0;
+      transition: opacity .3s;
+    }
+
+    .btn-auth:hover  { box-shadow: 0 0 28px rgba(0,255,245,.35); }
+    .btn-auth:hover::before  { opacity: .12; }
+    .btn-auth:active { transform: scale(.97); }
+    .btn-auth:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+    .btn-auth span { position: relative; z-index: 1; }
+
+    /* ── Error message ── */
+    .error-msg {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 12px 14px;
+      background: rgba(255,0,60,.07);
+      border: 1px solid rgba(255,0,60,.35);
+      border-radius: 6px;
+      color: var(--neon-red);
+      font-size: clamp(.75rem, 2vw, .82rem);
+      letter-spacing: .04em;
+      margin-top: 14px;
+      line-height: 1.5;
+    }
+    .error-msg.hidden { display: none; }
+    .error-msg.shake  { animation: shakeX .4s ease; }
+
+    .error-icon { flex-shrink: 0; font-size: 1rem; line-height: 1.4; }
+
+    @keyframes shakeX {
+      0%, 100% { transform: translateX(0); }
+      20%       { transform: translateX(-7px); }
+      40%       { transform: translateX(7px); }
+      60%       { transform: translateX(-4px); }
+      80%       { transform: translateX(4px); }
+    }
+
+    /* ── Status indicator ── */
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 18px;
+      font-size: clamp(.6rem, 1.8vw, .68rem);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      flex-wrap: wrap;
+      text-align: center;
+    }
+
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--neon-green);
+      animation: dotBlink 1.5s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes dotBlink {
+      0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--neon-green); }
+      50%       { opacity: .3; box-shadow: none; }
+    }
+
+    /* ── Access log toggle ── */
+    .log-toggle {
+      text-align: center;
+      margin-top: 18px;
+      font-size: clamp(.65rem, 1.8vw, .72rem);
+      letter-spacing: .12em;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: color .2s;
+      padding: 8px;
+      user-select: none;
+    }
+    .log-toggle:hover { color: var(--neon-cyan); }
+
+    .access-log {
+      margin-top: 10px;
+      background: rgba(0,0,0,.45);
+      border: 1px solid var(--border-dim);
+      border-radius: 6px;
+      padding: 10px 12px;
+      max-height: 110px;
+      overflow-y: auto;
+      font-size: clamp(.62rem, 1.6vw, .7rem);
+      color: var(--text-dim);
+      display: none;
+      overscroll-behavior: contain;
+    }
+
+    .access-log.visible { display: block; }
+
+    .log-entry {
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+      word-break: break-all;
+      line-height: 1.5;
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-ok  { color: var(--neon-green); }
+    .log-err { color: var(--neon-red); }
+    .log-info{ color: var(--neon-orange); }
+
+    /* ============================================================
+       LOCK SCREEN — LANDSCAPE PHONE FIX
+    ============================================================ */
+    @media (max-height: 500px) and (orientation: landscape) {
+      #lock-screen {
+        justify-content: flex-start;
+        padding-top: 12px;
+      }
+      .lock-inner { gap: 10px; }
+      .brand-header { margin-bottom: 0; }
+      .lock-icon-wrap { display: none; } /* hide rings on tiny landscape */
+      .auth-panel {
+        padding: 14px 20px;
+        max-width: 560px;
+      }
+      .field-group { margin-bottom: 10px; }
+      .panel-title { margin-bottom: 10px; padding-bottom: 8px; font-size: .72rem; }
+      .status-row,
+      .log-toggle  { margin-top: 10px; }
+    }
+
+    /* ============================================================
+       CONTENT AREA
+    ============================================================ */
+    #app-content {
+      position: relative;
+      z-index: 10;
+      display: none;
+      min-height: 100dvh;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    #app-content.visible { display: block; }
+
+    /* ── Top bar ── */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 clamp(12px, 3vw, 24px);
+      height: clamp(50px, 8vw, 64px);
+      background: rgba(10,10,26,.96);
+      border-bottom: 1px solid var(--border-dim);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      /* Safe area top */
+      padding-top: env(safe-area-inset-top);
+    }
+
+    .top-bar-brand {
+      font-size: clamp(.65rem, 2vw, .82rem);
+      letter-spacing: .15em;
+      background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 1;
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .session-user {
+      font-size: clamp(.62rem, 1.8vw, .72rem);
+      color: var(--neon-green);
+      letter-spacing: .08em;
+      white-space: nowrap;
+    }
+
+    /* Hide username on very small screens */
+    @media (max-width: 360px) {
+      .session-user { display: none; }
+    }
+
+    .btn-lock {
+      padding: 0 clamp(10px, 2vw, 16px);
+      height: clamp(32px, 5vw, 38px);
+      background: transparent;
+      border: 1px solid var(--neon-red);
+      border-radius: 4px;
+      color: var(--neon-red);
+      font-family: var(--font-mono);
+      font-size: clamp(.62rem, 1.8vw, .7rem);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap;
+      min-width: var(--touch-min);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-lock:hover {
+      background: rgba(255,0,60,.1);
+      box-shadow: 0 0 10px rgba(255,0,60,.25);
+    }
+
+    /* ── Content render area ── */
+    #rendered-content {
+      padding: clamp(20px, 5vw, 48px) clamp(16px, 4vw, 32px);
+      max-width: 900px;
+      margin: 0 auto;
+      animation: fadeInUp .5s ease both;
+    }
+
+    /* ── Default content styles ── */
+    #rendered-content h1,
+    #rendered-content h2,
+    #rendered-content h3 {
+      color: var(--neon-cyan);
+      margin-bottom: 12px;
+      letter-spacing: .04em;
+      line-height: 1.3;
+    }
+
+    #rendered-content h1 {
+      font-size: clamp(1.3rem, 4vw, 2rem);
+      border-bottom: 1px solid var(--border-dim);
+      padding-bottom: 12px;
+      margin-bottom: 24px;
+    }
+
+    #rendered-content h2 {
+      font-size: clamp(1rem, 3vw, 1.4rem);
+      margin-top: 28px;
+    }
+
+    #rendered-content p {
+      line-height: 1.8;
+      color: var(--text-primary);
+      margin-bottom: 14px;
+      font-size: clamp(.85rem, 2.2vw, .95rem);
+    }
+
+    #rendered-content .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      border-radius: 8px;
+      padding: clamp(16px, 3vw, 24px);
+      margin-bottom: 16px;
+      transition: border-color .3s, box-shadow .3s;
+    }
+
+    #rendered-content .card:hover {
+      border-color: rgba(0,255,245,.4);
+      box-shadow: 0 0 20px rgba(0,255,245,.06);
+    }
+
+    #rendered-content .tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 3px;
+      font-size: clamp(.64rem, 1.8vw, .72rem);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      background: rgba(0,255,245,.08);
+      color: var(--neon-cyan);
+      border: 1px solid rgba(0,255,245,.25);
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+
+    #rendered-content ul {
+      padding-left: 20px;
+      line-height: 2;
+      color: var(--text-primary);
+      font-size: clamp(.85rem, 2.2vw, .95rem);
+    }
+
+    /* ============================================================
+       BRAND FOOTER
+    ============================================================ */
+    .brand-footer {
+      text-align: center;
+      padding: clamp(24px, 4vw, 40px) clamp(16px, 4vw, 24px);
+      border-top: 1px solid var(--border-dim);
+      font-size: clamp(.62rem, 1.8vw, .72rem);
+      letter-spacing: .12em;
+      color: var(--text-dim);
+      line-height: 2;
+    }
+
+    .brand-footer a {
+      color: var(--neon-cyan);
+      text-decoration: none;
+      transition: color .2s;
+      word-break: break-word;
+    }
+    .brand-footer a:hover { color: var(--neon-magenta); }
+
+    .footer-protocol {
+      display: inline-block;
+      background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      font-weight: 700;
+      font-size: clamp(.7rem, 2vw, .82rem);
+    }
+
+    .footer-divider {
+      margin: 0 8px;
+      opacity: .3;
+    }
+
+    /* ── Social links ── */
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 8px 16px;
+      margin-top: 8px;
+    }
+
+    /* ============================================================
+       ANIMATIONS
+    ============================================================ */
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Unlock flash ── */
+    .unlock-flash {
+      position: fixed;
+      inset: 0;
+      background: var(--neon-cyan);
+      opacity: 0;
+      z-index: 99;
+      pointer-events: none;
+      animation: flashIn .55s ease forwards;
+    }
+
+    @keyframes flashIn {
+      0%   { opacity: .3; }
+      100% { opacity: 0; }
+    }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(0,255,245,.2);
+      border-top-color: var(--neon-cyan);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Lockout countdown ── */
+    .lockout-bar-wrap {
+      height: 3px;
+      background: rgba(255,0,60,.15);
+      border-radius: 3px;
+      margin-top: 10px;
+      overflow: hidden;
+      display: none;
+    }
+    .lockout-bar {
+      height: 100%;
+      background: var(--neon-red);
+      width: 100%;
+      transition: width 1s linear;
+      box-shadow: 0 0 6px var(--neon-red);
+    }
+    .lockout-bar-wrap.visible { display: block; }
+
+    /* ============================================================
+       PARTICLES (decorative — desktop only)
+    ============================================================ */
+    .particles-wrap {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      overflow: hidden;
+    }
+
+    @media (max-width: 768px) {
+      .particles-wrap { display: none; } /* Save battery on mobile */
+    }
+
+    .particle {
+      position: absolute;
+      width: 2px; height: 2px;
+      border-radius: 50%;
+      background: var(--neon-cyan);
+      opacity: 0;
+      animation: particleDrift linear infinite;
+    }
+
+    @keyframes particleDrift {
+      0%   { transform: translateY(100vh) translateX(0); opacity: 0; }
+      10%  { opacity: .6; }
+      90%  { opacity: .4; }
+      100% { transform: translateY(-10vh) translateX(40px); opacity: 0; }
+    }
+
+    /* ============================================================
+       SCROLLBAR
+    ============================================================ */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg-dark); }
+    ::-webkit-scrollbar-thumb {
+      background: var(--neon-cyan);
+      border-radius: 2px;
+    }
+    ::-webkit-scrollbar-corner { background: var(--bg-dark); }
+
+    /* ============================================================
+       FOCUS STYLES (accessibility)
+    ============================================================ */
+    :focus-visible {
+      outline: 2px solid var(--neon-cyan);
+      outline-offset: 2px;
+    }
+
+    /* ============================================================
+       PRINT — hide everything sensitive
+    ============================================================ */
+    @media print {
+      #lock-screen { display: flex !important; }
+      #app-content { display: none !important; }
+      body::before, body::after { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════
+       PARTICLES (decorative, desktop only)
+  ═══════════════════════════════════════════ -->
+  <div class="particles-wrap" id="particles-wrap" aria-hidden="true"></div>
+
+  <!-- ══════════════════════════════════════════
+       TIMEOUT PROGRESS BAR
+  ═══════════════════════════════════════════ -->
+  <div class="timeout-bar-wrap" id="timeout-bar-wrap" role="progressbar" aria-label="Session timeout">
+    <div class="timeout-bar" id="timeout-bar"></div>
+  </div>
+  <div id="timer-badge" aria-live="polite">⏱ <span id="timer-text"></span></div>
+
+  <!-- ══════════════════════════════════════════
+       LOCK SCREEN
+  ═══════════════════════════════════════════ -->
+  <main id="lock-screen" role="main" aria-label="Authentication">
+
+    <div class="lock-inner">
+
+      <!-- Brand -->
+      <header class="brand-header">
+        <div class="brand-logo" aria-label="KeyForge">⬡ KeyForge</div>
+        <div class="brand-tagline">Static-Auth Security Protocol</div>
+      </header>
+
+      <!-- Lock icon -->
+      <div class="lock-icon-wrap" aria-hidden="true">
+        <span class="lock-icon">🔒</span>
+        <div class="lock-ring"></div>
+        <div class="lock-ring lock-ring-2"></div>
+      </div>
+
+      <!-- Auth panel -->
+      <div class="auth-panel" role="form" aria-label="Login form">
+
+        <div class="panel-title">▸ Authentication Required ◂</div>
+
+        <!-- Username -->
+        <div class="field-group">
+          <label class="field-label" for="username-input">Access Identity</label>
+          <div class="field-wrap">
+            <span class="field-icon" aria-hidden="true">👤</span>
+            <input
+              type="text"
+              id="username-input"
+              name="username"
+              placeholder="Enter username…"
+              autocomplete="username"
+              autocorrect="off"
+              autocapitalize="none"
+              spellcheck="false"
+              inputmode="text"
+              enterkeyhint="next"
+            />
+          </div>
+        </div>
+
+        <!-- Password -->
+        <div class="field-group">
+          <label class="field-label" for="password-input">Security Key</label>
+          <div class="field-wrap">
+            <span class="field-icon" aria-hidden="true">🔑</span>
+            <input
+              type="password"
+              id="password-input"
+              name="password"
+              placeholder="Enter access key…"
+              autocomplete="current-password"
+              autocorrect="off"
+              autocapitalize="none"
+              spellcheck="false"
+              enterkeyhint="go"
+            />
+            <button
+              class="toggle-pw"
+              id="toggle-pw"
+              type="button"
+              aria-label="Toggle password visibility"
+              title="Toggle visibility"
+            >👁</button>
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <button class="btn-auth" id="btn-authenticate" type="button" aria-live="polite">
+          <span id="btn-label">⚡ AUTHENTICATE</span>
+        </button>
+
+        <!-- Lockout progress -->
+        <div class="lockout-bar-wrap" id="lockout-bar-wrap" aria-hidden="true">
+          <div class="lockout-bar" id="lockout-bar"></div>
+        </div>
+
+        <!-- Error -->
+        <div class="error-msg hidden" id="error-msg" role="alert" aria-live="assertive">
+          <span class="error-icon">⛔</span>
+          <span id="error-text">Invalid security key. Access denied.</span>
+        </div>
+
+        <!-- Status -->
+        <div class="status-row" aria-label="Encryption status">
+          <div class="status-dot" aria-hidden="true"></div>
+          <span>ENCRYPTION ACTIVE · AES-256</span>
+        </div>
+
+        <!-- Access Log -->
+        <div
+          class="log-toggle"
+          id="log-toggle"
+          role="button"
+          tabindex="0"
+          aria-expanded="false"
+          aria-controls="access-log"
+        >▸ Access Log ◂</div>
+        <div
+          class="access-log"
+          id="access-log"
+          role="log"
+          aria-label="Access log"
+          aria-live="polite"
+        ></div>
+
+      </div><!-- /.auth-panel -->
+
+    </div><!-- /.lock-inner -->
+
+  </main><!-- /#lock-screen -->
+
+  <!-- ══════════════════════════════════════════
+       APP CONTENT (shown after auth)
+  ═══════════════════════════════════════════ -->
+  <div id="app-content" aria-label="Secure content" aria-hidden="true">
+
+    <nav class="top-bar" role="navigation" aria-label="Session controls">
+      <div class="top-bar-brand" aria-label="KeyForge Secure Session">⬡ KEYFORGE · SECURE SESSION</div>
+      <div class="top-bar-right">
+        <span class="session-user" id="session-user-label" aria-live="polite"></span>
+        <button class="btn-lock" id="btn-lock-now" type="button" aria-label="Lock session">
+          🔒 LOCK
+        </button>
+      </div>
+    </nav>
+
+    <div id="rendered-content" role="main"></div>
+
+    <footer class="brand-footer">
+      <div><span class="footer-protocol">Powered by KeyForge Security Protocol</span></div>
+      <div class="footer-links">
+        <span>Built by
+          <a href="https://github.com/SudhirDevOps1" target="_blank" rel="noopener noreferrer">
+            Sudhir Kumar (@SudhirDevOps1)
+          </a>
+        </span>
+        <span class="footer-divider">·</span>
+        <span>© 2026 All rights reserved</span>
+      </div>
+    </footer>
+
+  </div><!-- /#app-content -->
+
+  <!-- ══════════════════════════════════════════
+       INLINE AUTH ENGINE
+  ═══════════════════════════════════════════ -->
+  <script>
+  /* ╔══════════════════════════════════════════════════════════════╗
+     ║      KeyForge Static-Auth  ·  Embedded Engine v2.0         ║
+     ║      By Sudhir Kumar (@SudhirDevOps1)                       ║
+     ╚══════════════════════════════════════════════════════════════╝ */
+  ;(function KeyForgeAuth() {
+    'use strict';
+
+    /* ── CONFIG ─────────────────────────────────────────────── */
+    const CONFIG = {
+      contentFile:      'encrypted-content.json',
+      autoLockSeconds:  120,
+      maxAttempts:      5,
+      lockoutSeconds:   30,
+      showAccessLog:    true,
+      maxLogEntries:    50,
+      particleCount:    18,
+    };
+
+    /* ── SESSION STATE (memory only) ─────────────────────────── */
+    const SESSION = {
+      active:       false,
+      username:     null,
+      barInterval:  null,
+      timeLeft:     0,
+    };
+
+    /* ── ACCESS LOG ──────────────────────────────────────────── */
+    const ACCESS_LOG = [];
+
+    /* ── ATTEMPT TRACKING ────────────────────────────────────── */
+    let failedAttempts  = 0;
+    let lockoutUntil    = 0;
+    let lockoutInterval = null;
+
+    /* ── DOM ─────────────────────────────────────────────────── */
+    const $  = id => document.getElementById(id);
+    const DOM = {
+      lockScreen:      $('lock-screen'),
+      appContent:      $('app-content'),
+      usernameInput:   $('username-input'),
+      passwordInput:   $('password-input'),
+      togglePw:        $('toggle-pw'),
+      btnAuth:         $('btn-authenticate'),
+      btnLabel:        $('btn-label'),
+      errorMsg:        $('error-msg'),
+      errorText:       $('error-text'),
+      renderedContent: $('rendered-content'),
+      sessionUserLabel:$('session-user-label'),
+      btnLockNow:      $('btn-lock-now'),
+      logToggle:       $('log-toggle'),
+      accessLog:       $('access-log'),
+      timeoutBarWrap:  $('timeout-bar-wrap'),
+      timeoutBar:      $('timeout-bar'),
+      timerBadge:      $('timer-badge'),
+      timerText:       $('timer-text'),
+      lockoutBarWrap:  $('lockout-bar-wrap'),
+      lockoutBar:      $('lockout-bar'),
+      particlesWrap:   $('particles-wrap'),
+    };
+
+    /* ── CRYPTO ──────────────────────────────────────────────── */
+    const Crypto = {
+      decrypt(ciphertext, passphrase) {
+        try {
+          const bytes = CryptoJS.AES.decrypt(ciphertext, passphrase);
+          const plain = bytes.toString(CryptoJS.enc.Utf8);
+          return plain.length > 0 ? plain : null;
+        } catch { return null; }
+      },
+      encrypt(plaintext, passphrase) {
+        return CryptoJS.AES.encrypt(plaintext, passphrase).toString();
+      },
+    };
+
+    /* ── CONTENT LOADER ──────────────────────────────────────── */
+    const ContentLoader = {
+      _raw: null,
+      async fetch() {
+        if (this._raw) return this._raw;
+        const res = await window.fetch(CONFIG.contentFile);
+        if (!res.ok) throw new Error(`HTTP ${res.status} — ${CONFIG.contentFile}`);
+        this._raw = await res.json();
+        return this._raw;
+      },
+      async tryDecrypt(password) {
+        const payload = await this.fetch();
+
+        if (payload.users && Array.isArray(payload.users)) {
+          for (const entry of payload.users) {
+            const plain = Crypto.decrypt(entry.ciphertext, password);
+            if (plain) {
+              return { user: entry.username || 'USER', content: JSON.parse(plain) };
+            }
+          }
+          return null;
+        }
+
+        const plain = Crypto.decrypt(payload.ciphertext, password);
+        if (!plain) return null;
+        return { user: 'USER', content: JSON.parse(plain) };
+      },
+    };
+
+    /* ── RENDERER ────────────────────────────────────────────── */
+    const Renderer = {
+      render(content, container) {
+        container.innerHTML = '';
+
+        if (content.html) {
+          container.innerHTML = content.html;
+          return;
+        }
+
+        if (content.title) {
+          const h1 = document.createElement('h1');
+          h1.textContent = content.title;
+          container.appendChild(h1);
+        }
+
+        if (content.description) {
+          const p = document.createElement('p');
+          p.textContent = content.description;
+          container.appendChild(p);
+        }
+
+        if (Array.isArray(content.sections)) {
+          content.sections.forEach(sec => this._section(sec, container));
+        }
+      },
+
+      _section(sec, container) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        if (sec.heading) {
+          const h2 = document.createElement('h2');
+          h2.textContent = sec.heading;
+          card.appendChild(h2);
+        }
+        if (sec.body) {
+          const p = document.createElement('p');
+          p.textContent = sec.body;
+          card.appendChild(p);
+        }
+        if (Array.isArray(sec.tags)) {
+          const wrap = document.createElement('div');
+          wrap.style.marginTop = '10px';
+          sec.tags.forEach(t => {
+            const span = document.createElement('span');
+            span.className = 'tag';
+            span.textContent = t;
+            wrap.appendChild(span);
+          });
+          card.appendChild(wrap);
+        }
+        if (Array.isArray(sec.list)) {
+          const ul = document.createElement('ul');
+          sec.list.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            ul.appendChild(li);
+          });
+          card.appendChild(ul);
+        }
+        container.appendChild(card);
+      },
+    };
+
+    /* ── ACCESS LOG ──────────────────────────────────────────── */
+    const Log = {
+      add(type, message) {
+        ACCESS_LOG.unshift({ ts: new Date().toISOString(), type, message });
+        if (ACCESS_LOG.length > CONFIG.maxLogEntries) ACCESS_LOG.pop();
+        this._render();
+      },
+      _render() {
+        DOM.accessLog.innerHTML = ACCESS_LOG.map(e => `
+          <div class="log-entry">
+            <span class="${e.type === 'ok' ? 'log-ok' : e.type === 'err' ? 'log-err' : 'log-info'}">
+              ${e.type === 'ok' ? '✔' : e.type === 'err' ? '✘' : '·'}
+            </span>
+            &nbsp;<span style="opacity:.5">${e.ts.slice(11,19)}</span>&nbsp;— ${this._esc(e.message)}
+          </div>`).join('');
+      },
+      _esc(s) {
+        return String(s)
+          .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      },
+    };
+
+    /* ── AUTO-LOCK TIMER ─────────────────────────────────────── */
+    const Timer = {
+      start() {
+        if (!CONFIG.autoLockSeconds) return;
+        this.clear();
+        SESSION.timeLeft = CONFIG.autoLockSeconds;
+        DOM.timeoutBarWrap.style.display = 'block';
+        DOM.timerBadge.style.display     = 'block';
+        DOM.timeoutBar.style.width       = '100%';
+        DOM.timeoutBar.style.background  =
+          'linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta))';
+
+        SESSION.barInterval = setInterval(() => {
+          SESSION.timeLeft = Math.max(0, SESSION.timeLeft - 1);
+          const pct = (SESSION.timeLeft / CONFIG.autoLockSeconds) * 100;
+          DOM.timeoutBar.style.width    = pct + '%';
+          DOM.timerText.textContent     = `Auto-lock in ${SESSION.timeLeft}s`;
+
+          if (SESSION.timeLeft <= 30) {
+            DOM.timeoutBar.style.background =
+              'linear-gradient(90deg, var(--neon-yellow), var(--neon-red))';
+          }
+
+          if (SESSION.timeLeft <= 0) {
+            Log.add('info', 'Session auto-locked after timeout.');
+            Auth.lock();
+          }
+        }, 1000);
+      },
+      reset() {
+        if (!CONFIG.autoLockSeconds || !SESSION.active) return;
+        SESSION.timeLeft = CONFIG.autoLockSeconds;
+        DOM.timeoutBar.style.background =
+          'linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta))';
+      },
+      clear() {
+        clearInterval(SESSION.barInterval);
+        SESSION.barInterval = null;
+        DOM.timeoutBarWrap.style.display = 'none';
+        DOM.timerBadge.style.display     = 'none';
+      },
+    };
+
+    /* ── LOCKOUT VISUAL ──────────────────────────────────────── */
+    function startLockoutVisual(seconds) {
+      clearInterval(lockoutInterval);
+      let remaining = seconds;
+      DOM.lockoutBarWrap.classList.add('visible');
+      DOM.lockoutBar.style.width = '100%';
+
+      lockoutInterval = setInterval(() => {
+        remaining = Math.max(0, remaining - 1);
+        DOM.lockoutBar.style.width = (remaining / seconds * 100) + '%';
+        if (remaining <= 0) {
+          clearInterval(lockoutInterval);
+          DOM.lockoutBarWrap.classList.remove('visible');
+        }
+      }, 1000);
+    }
+
+    /* ── AUTH ────────────────────────────────────────────────── */
+    const Auth = {
+      async authenticate() {
+        const now = Date.now();
+        if (now < lockoutUntil) {
+          const wait = Math.ceil((lockoutUntil - now) / 1000);
+          UI.showError(`Too many attempts. Wait ${wait}s before retrying.`);
+          return;
+        }
+
+        const password = DOM.passwordInput.value;
+        const username = DOM.usernameInput.value.trim() || 'AGENT';
+
+        if (!password) {
+          UI.showError('Security key cannot be empty.');
+          return;
+        }
+
+        UI.setLoading(true);
+        UI.hideError();
+
+        try {
+          const result = await ContentLoader.tryDecrypt(password);
+
+          if (!result) {
+            failedAttempts++;
+            Log.add('err',
+              `AUTH FAIL — ${username} (attempt ${failedAttempts}/${CONFIG.maxAttempts})`
+            );
+
+            if (failedAttempts >= CONFIG.maxAttempts) {
+              lockoutUntil    = Date.now() + CONFIG.lockoutSeconds * 1000;
+              failedAttempts  = 0;
+              UI.showError(`Max attempts reached. Locked for ${CONFIG.lockoutSeconds}s.`);
+              startLockoutVisual(CONFIG.lockoutSeconds);
+            } else {
+              const rem = CONFIG.maxAttempts - failedAttempts;
+              UI.showError(`Invalid key. ${rem} attempt${rem !== 1 ? 's' : ''} remaining.`);
+            }
+
+            UI.setLoading(false);
+            DOM.passwordInput.value = '';
+            DOM.passwordInput.focus();
+            return;
+          }
+
+          /* ── SUCCESS ── */
+          failedAttempts = 0;
+          SESSION.active   = true;
+          SESSION.username = result.user || username;
+
+          Log.add('ok', `AUTH OK — ${SESSION.username} — ${new Date().toLocaleTimeString()}`);
+
+          /* Wipe inputs immediately */
+          DOM.passwordInput.value = '';
+          DOM.usernameInput.value  = '';
+
+          Renderer.render(result.content, DOM.renderedContent);
+          this._unlockTransition(SESSION.username);
+          Timer.start();
+
+        } catch (err) {
+          Log.add('err', `SYSTEM ERROR — ${err.message}`);
+          UI.showError('Content load failed. Ensure encrypted-content.json exists.');
+          console.error('[KeyForge]', err);
+          UI.setLoading(false);
+        }
+      },
+
+      lock() {
+        SESSION.active   = false;
+        SESSION.username = null;
+        Timer.clear();
+
+        DOM.renderedContent.innerHTML = '';
+        DOM.appContent.classList.remove('visible');
+        DOM.appContent.setAttribute('aria-hidden', 'true');
+        DOM.lockScreen.classList.remove('hidden');
+        DOM.lockScreen.removeAttribute('aria-hidden');
+        DOM.sessionUserLabel.textContent = '';
+
+        /* Return focus to password */
+        setTimeout(() => DOM.passwordInput.focus(), 300);
+        Log.add('info', 'Session locked.');
+      },
+
+      _unlockTransition(username) {
+        const flash = document.createElement('div');
+        flash.className = 'unlock-flash';
+        document.body.appendChild(flash);
+        setTimeout(() => flash.remove(), 700);
+
+        DOM.lockScreen.classList.add('hidden');
+        DOM.lockScreen.setAttribute('aria-hidden', 'true');
+        DOM.sessionUserLabel.textContent = `◈ ${username}`;
+
+        setTimeout(() => {
+          DOM.appContent.classList.add('visible');
+          DOM.appContent.removeAttribute('aria-hidden');
+          DOM.renderedContent.focus?.();
+          UI.setLoading(false);
+        }, 420);
+      },
+    };
+
+    /* ── UI ──────────────────────────────────────────────────── */
+    const UI = {
+      showError(msg) {
+        DOM.errorText.textContent = msg;
+        DOM.errorMsg.classList.remove('hidden');
+        DOM.errorMsg.classList.remove('shake');
+        void DOM.errorMsg.offsetWidth; // reflow
+        DOM.errorMsg.classList.add('shake');
+      },
+      hideError() {
+        DOM.errorMsg.classList.add('hidden');
+      },
+      setLoading(on) {
+        if (on) {
+          DOM.btnLabel.innerHTML =
+            '<span class="spinner" aria-hidden="true"></span>VERIFYING…';
+          DOM.btnAuth.disabled = true;
+          DOM.btnAuth.setAttribute('aria-busy', 'true');
+        } else {
+          DOM.btnLabel.innerHTML = '⚡ AUTHENTICATE';
+          DOM.btnAuth.disabled   = false;
+          DOM.btnAuth.removeAttribute('aria-busy');
+        }
+      },
+    };
+
+    /* ── PARTICLES ───────────────────────────────────────────── */
+    function initParticles() {
+      if (!DOM.particlesWrap) return;
+      /* Only on non-touch devices */
+      if (window.matchMedia('(max-width: 768px)').matches) return;
+
+      for (let i = 0; i < CONFIG.particleCount; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        const size  = Math.random() * 3 + 1;
+        const left  = Math.random() * 100;
+        const delay = Math.random() * 12;
+        const dur   = Math.random() * 8 + 8;
+        const color = Math.random() > .5 ? 'var(--neon-cyan)' : 'var(--neon-magenta)';
+
+        p.style.cssText = `
+          width:${size}px; height:${size}px;
+          left:${left}%;
+          animation-duration:${dur}s;
+          animation-delay:${delay}s;
+          background:${color};
+        `;
+        DOM.particlesWrap.appendChild(p);
+      }
+    }
+
+    /* ── EVENTS ──────────────────────────────────────────────── */
+    function bindEvents() {
+      /* Authenticate */
+      DOM.btnAuth.addEventListener('click', () => Auth.authenticate());
+
+      /* Enter on password */
+      DOM.passwordInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') Auth.authenticate();
+      });
+
+      /* Tab / Enter from username → password */
+      DOM.usernameInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') DOM.passwordInput.focus();
+      });
+
+      /* Toggle password visibility */
+      DOM.togglePw.addEventListener('click', () => {
+        const isPw = DOM.passwordInput.type === 'password';
+        DOM.passwordInput.type = isPw ? 'text' : 'password';
+        DOM.togglePw.textContent  = isPw ? '🙈' : '👁';
+        DOM.togglePw.setAttribute('aria-label',
+          isPw ? 'Hide password' : 'Show password'
+        );
+      });
+
+      /* Manual lock */
+      DOM.btnLockNow.addEventListener('click', () => Auth.lock());
+
+      /* Access log toggle */
+      if (CONFIG.showAccessLog) {
+        const toggleLog = () => {
+          const visible = DOM.accessLog.classList.toggle('visible');
+          DOM.logToggle.textContent = visible ? '▾ Access Log ▾' : '▸ Access Log ◂';
+          DOM.logToggle.setAttribute('aria-expanded', String(visible));
+        };
+        DOM.logToggle.addEventListener('click', toggleLog);
+        DOM.logToggle.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleLog(); }
+        });
+      } else {
+        DOM.logToggle.style.display = 'none';
+      }
+
+      /* Reset timer on activity */
+      ['mousemove','keydown','touchstart','scroll','click'].forEach(evt => {
+        document.addEventListener(evt, () => Timer.reset(), { passive: true });
+      });
+
+      /* Visibility API — lock on tab hide after timeout */
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden && SESSION.active) {
+          Log.add('info', 'Tab hidden — session continues.');
+        }
+      });
+
+      /* Handle back button on mobile (keep lock screen on top) */
+      window.addEventListener('popstate', () => {
+        if (SESSION.active) Auth.lock();
+      });
+    }
+
+    /* ── INIT ────────────────────────────────────────────────── */
+    function init() {
+      bindEvents();
+      initParticles();
+
+      Log.add('info',
+        `KeyForge v2.0 initialised · ${new Date().toLocaleString()}`
+      );
+
+      /* Prefetch encrypted content */
+      ContentLoader.fetch().catch(() => {
+        Log.add('err', 'Could not prefetch content file — check path.');
+      });
+
+      /* Auto-focus username on desktop, password on mobile */
+      if (window.innerWidth >= 768) {
+        DOM.usernameInput.focus();
+      } else {
+        /* Small delay so keyboard doesn't pop instantly on mobile */
+        setTimeout(() => DOM.passwordInput.focus(), 400);
+      }
+    }
+
+    /* ── PUBLIC API ──────────────────────────────────────────── */
+    window.KeyForge = {
+      encryptSingle(content, password) {
+        const ct = Crypto.encrypt(JSON.stringify(content), password);
+        return JSON.stringify({ ciphertext: ct }, null, 2);
+      },
+      encryptMultiUser(users) {
+        const entries = users.map(u => ({
+          username:   u.username,
+          ciphertext: Crypto.encrypt(JSON.stringify(u.content), u.password),
+        }));
+        return JSON.stringify({ users: entries }, null, 2);
+      },
+      generateSingle(content, password) {
+        const json = this.encryptSingle(content, password);
+        console.log('%c[KeyForge] Copy into encrypted-content.json ↓', 'color:#00fff5;font-weight:bold');
+        console.log(json);
+        return json;
+      },
+      generateMultiUser(users) {
+        const json = this.encryptMultiUser(users);
+        console.log('%c[KeyForge] Copy into encrypted-content.json ↓', 'color:#00fff5;font-weight:bold');
+        console.log(json);
+        return json;
+      },
+    };
+
+    /* Boot */
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+
+  })();
+  </script>
+
+</body>
+</html>
