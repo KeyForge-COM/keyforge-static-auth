@@ -11,7 +11,7 @@
 ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 ```
 
-### ⚡ Static-Auth Security Protocol v2.0 (Latest Static-Auth Security Protocol v3.4 )
+### ⚡ Static-Auth Security Protocol v2.0 (version LTS.html support)
 
 > **Transform any static website into a password-protected vault**
 > **— without any backend, server, or database!**
